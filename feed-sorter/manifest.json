@@ -1,0 +1,60 @@
+{
+  "manifest_version": 3,
+  "name": "Feed Sorter (개인용)",
+  "version": "1.0.0",
+  "description": "TikTok·Instagram 피드를 조회수·좋아요·댓글·날짜순으로 재정렬하고 썸네일에 스탯을 표시하는 개인용 리서치 도구입니다.",
+  "minimum_chrome_version": "102",
+  "permissions": [
+    "storage",
+    "downloads"
+  ],
+  "host_permissions": [
+    "*://*.tiktok.com/*",
+    "*://*.instagram.com/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "Feed Sorter",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.tiktok.com/*",
+        "*://*.instagram.com/*"
+      ],
+      "js": [
+        "src/constants.js",
+        "src/content.js"
+      ],
+      "css": [
+        "src/content.css"
+      ],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/inject.js"
+      ],
+      "matches": [
+        "*://*.tiktok.com/*",
+        "*://*.instagram.com/*"
+      ]
+    }
+  ]
+}

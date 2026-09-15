@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Feed Sorter</title>
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="dot"></span>Feed Sorter<small>개인용 리서치 도구</small></div>
+    <div class="site" id="site">확인 중…</div>
+  </header>
+
+  <div id="unsupported" class="notice" hidden>
+    <b>이 페이지에서는 동작하지 않습니다.</b>
+    <p>TikTok 또는 Instagram의 검색 결과·프로필 페이지를 연 뒤 다시 열어주세요.</p>
+  </div>
+
+  <main id="panel" hidden>
+    <section class="card">
+      <h2>정렬 기준</h2>
+      <div class="sorts" id="sorts">
+        <button class="sort" data-sort="views">👁 조회수↓</button>
+        <button class="sort" data-sort="likes">❤ 좋아요↓</button>
+        <button class="sort" data-sort="comments">💬 댓글↓</button>
+        <button class="sort" data-sort="newest">🆕 최신순</button>
+        <button class="sort" data-sort="oldest">📜 오래된순</button>
+        <button class="sort" data-sort="original">↩ 원래 순서</button>
+      </div>
+      <p class="hint" id="sortHint">이 사이트의 기본 정렬로 기억됩니다.</p>
+    </section>
+
+    <section class="card">
+      <h2>최소 조회수 필터</h2>
+      <div class="row">
+        <input type="number" id="minViews" min="0" step="1000" placeholder="0 (사용 안 함)">
+        <button class="btn" id="minApply">적용</button>
+      </div>
+      <p class="hint">기준 미달 영상은 흐리게(25%) 표시됩니다. 마우스를 올리면 다시 보입니다.</p>
+    </section>
+
+    <section class="card">
+      <h2>오버레이</h2>
+      <label class="sw"><input type="checkbox" id="showBadge"><span>스탯 뱃지 (👁 ❤ 💬)</span></label>
+      <label class="sw"><input type="checkbox" id="showTier"><span>조회수 테두리 <i class="tag gold">100만+</i><i class="tag green">10만+</i></span></label>
+      <label class="sw"><input type="checkbox" id="showDate"><span>게시일 표시 (3mo ago)</span></label>
+      <label class="sw"><input type="checkbox" id="showDownload"><span>다운로드 버튼 (카드에 마우스 올릴 때)</span></label>
+    </section>
+
+    <section class="card">
+      <h2>수집 현황</h2>
+      <div class="stats">
+        <div class="stat"><div class="v" id="cCollected">0</div><div class="k">이번 세션 수집</div></div>
+        <div class="stat"><div class="v" id="cScreen">0</div><div class="k">현재 화면 매칭</div></div>
+      </div>
+      <button class="btn wide" id="csv">⬇ 현재 수집 데이터 CSV 내보내기</button>
+      <button class="btn wide ghost" id="rescan">↻ 다시 스캔</button>
+      <p class="hint">사용자가 스크롤하며 자연히 받은 응답만 읽습니다. 자동 스크롤·대량 수집은 하지 않습니다.</p>
+    </section>
+  </main>
+
+  <footer class="foot">v1.0.0 · 개인용 · 웹스토어 미배포</footer>
+  <script src="popup.js"></script>
+</body>
+</html>
