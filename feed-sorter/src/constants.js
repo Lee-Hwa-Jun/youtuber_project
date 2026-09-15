@@ -29,7 +29,7 @@
     /* SPA URL 변경 폴링 주기(ms) */
     URL_POLL_MS: 600,
     /* JSON 재귀 탐색 상한 (무한 루프·성능 사고 방지) */
-    WALK_MAX_DEPTH: 14,
+    WALK_MAX_DEPTH: 20,   /* Instagram GraphQL 은 꽤 깊게 중첩됩니다 */
     WALK_MAX_NODES: 40000,
 
     TIKTOK: {

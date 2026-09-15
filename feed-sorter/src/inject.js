@@ -46,6 +46,18 @@
   const WALK_MAX_DEPTH = cfg.walkMaxDepth || 14;
   const WALK_MAX_NODES = cfg.walkMaxNodes || 40000;
 
+  /* 디버그 모드: 콘솔에서 localStorage.setItem('fs_debug','1') 후 새로고침하면
+     가로챈 응답마다 몇 건을 뽑았는지 찍고, 못 읽은 응답 원본을
+     window.__FS_LAST_UNPARSED__ 에 남깁니다. */
+  let DEBUG = false;
+  try { DEBUG = localStorage.getItem('fs_debug') === '1'; } catch (e) { /* noop */ }
+  function debug() {
+    if (!DEBUG) return;
+    try {
+      console.log.apply(console, ['[Feed Sorter·debug]'].concat(Array.prototype.slice.call(arguments)));
+    } catch (e) { /* noop */ }
+  }
+
   /* 같은 응답을 두 번 처리하지 않도록 */
   const seen = new Set();
   /* 파싱 실패 경고를 엔드포인트당 한 번만 내보내기 위한 기록 */
@@ -155,14 +167,22 @@
     const code = o.code || o.shortcode;
     if (!code || typeof code !== 'string' || !/^[A-Za-z0-9_-]{5,}$/.test(code)) return null;
 
-    const hasSignal =
+    /* 미디어 노드인지 판별.
+       검색 결과처럼 통계가 비어 오는 응답도 있으므로, 통계가 하나도 없어도
+       미디어가 확실하면 받아들입니다. (카드 매핑·게시일 표시에는 쓸 수 있고,
+       통계 정렬에서는 자동으로 뒤로 밀립니다) */
+    const isMedia =
+      o.media_type !== undefined || o.image_versions2 !== undefined ||
+      o.video_versions !== undefined || o.thumbnail_url !== undefined ||
+      o.is_video !== undefined || o.caption !== undefined ||
       o.like_count !== undefined || o.comment_count !== undefined ||
       o.play_count !== undefined || o.ig_play_count !== undefined ||
       o.view_count !== undefined || o.video_view_count !== undefined ||
       o.taken_at !== undefined || o.taken_at_timestamp !== undefined ||
       o.edge_media_preview_like !== undefined || o.edge_liked_by !== undefined ||
-      o.edge_media_to_comment !== undefined;
-    if (!hasSignal) return null;
+      o.edge_media_to_comment !== undefined ||
+      (o.pk !== undefined && (o.user !== undefined || o.owner !== undefined));
+    if (!isMedia) return null;
 
     const user = o.user || o.owner || {};
     const views = pick(
@@ -179,7 +199,6 @@
       o.edge_media_to_comment && o.edge_media_to_comment.count,
       o.edge_media_to_parent_comment && o.edge_media_to_parent_comment.count
     );
-    if (views === null && likes === null && comments === null) return null;
 
     let media = '';
     try {
@@ -206,15 +225,47 @@
 
   const extractOne = PLATFORM === 'tiktok' ? tiktokItem : instagramItem;
 
-  /** 임의의 JSON 객체에서 우리가 아는 모양의 아이템을 모두 긁어냅니다. */
+  /**
+   * "영상 같아 보이는 노드"인가? — extractOne 보다 훨씬 느슨한 기준입니다.
+   * 이것이 하나도 없으면 애초에 영상과 무관한 응답이므로 경고하지 않습니다.
+   * (Instagram 의 /api/graphql 은 뱃지 수·검색창·프로필 등 온갖 질의를 함께
+   *  실어 나르므로, 그때마다 "구조가 바뀌었다"고 경고하면 전부 오탐입니다)
+   */
+  function looksLikeMedia(o) {
+    try {
+      if (PLATFORM === 'tiktok') {
+        if (o.stats && typeof o.stats === 'object') return true;
+        if (o.statsV2 && typeof o.statsV2 === 'object') return true;
+        return !!(o.author && typeof o.author === 'object' && o.id && /^\d{6,}$/.test(String(o.id)));
+      }
+      const code = o.code || o.shortcode;
+      if (typeof code === 'string' && /^[A-Za-z0-9_-]{5,}$/.test(code)) return true;
+      return o.pk !== undefined && (o.user !== undefined || o.owner !== undefined);
+    } catch (e) { return false; }
+  }
+
+  /**
+   * 임의의 JSON 객체에서 우리가 아는 모양의 아이템을 모두 긁어냅니다.
+   * 못 뽑은 경우를 진단할 수 있도록 "영상처럼 보이지만 실패한 노드"의
+   * 개수와 샘플도 함께 돌려줍니다.
+   */
   function extractItems(data) {
     const out = [];
     const ids = new Set();
+    let candidates = 0, sample = null;
     walk(data, function (node) {
       const it = extractOne(node);
-      if (it && !ids.has(it.id)) { ids.add(it.id); out.push(it); }
+      if (it) {
+        const key = it.code || it.id;
+        if (!ids.has(key)) { ids.add(key); out.push(it); }
+        return;
+      }
+      if (looksLikeMedia(node)) {
+        candidates++;
+        if (!sample) sample = node;
+      }
     });
-    return out;
+    return { items: out, candidates: candidates, sample: sample };
   }
 
   /* ======================== 2. content.js 로 전달 ======================== */
@@ -244,27 +295,43 @@
   }
 
   function handleData(url, data, source) {
-    let items = [];
+    const key = String(url).split('?')[0];
+    let res;
     try {
-      items = extractItems(data);
+      res = extractItems(data);
     } catch (e) {
-      warn('파싱 중 예외:', url, e && e.message);
+      warn('파싱 중 예외:', key, e && e.message);
       return;
     }
-    if (items.length) { emit(items, source); return; }
 
-    /* ── 구조 변경 감지: 관심 엔드포인트인데 한 건도 못 뽑았을 때 경고 ── */
-    const key = String(url).split('?')[0];
-    if (!warned.has(key)) {
-      warned.add(key);
-      warn(
-        '이 응답에서 영상 정보를 하나도 추출하지 못했습니다.\n' +
-        '  엔드포인트: ' + key + '\n' +
-        '  → 사이트 JSON 구조가 바뀌었을 수 있습니다. README.md 의\n' +
-        '    "사이트 구조가 바뀌었을 때" 절을 보고 src/inject.js 의\n' +
-        '    ' + (PLATFORM === 'tiktok' ? 'tiktokItem()' : 'instagramItem()') + ' 필드명을 고쳐주세요.'
-      );
+    if (res.items.length) {
+      debug(key, '→', res.items.length + '건 추출');
+      emit(res.items, source);
+      return;
     }
+
+    /* 영상처럼 생긴 노드가 아예 없으면, 이 응답은 원래 영상과 무관합니다.
+       (검색창 추천·알림 개수·프로필 정보 등) 경고하지 않습니다. */
+    if (!res.candidates) {
+      debug(key, '→ 영상 데이터 없는 응답 (정상)');
+      return;
+    }
+
+    /* 여기까지 왔다면 진짜로 구조가 바뀐 것입니다. 고칠 수 있게 키까지 보여줍니다. */
+    if (warned.has(key)) return;
+    warned.add(key);
+    let keys = [];
+    try { keys = Object.keys(res.sample || {}).slice(0, 40); } catch (e) { /* noop */ }
+    try { window.__FS_LAST_UNPARSED__ = res.sample; } catch (e) { /* noop */ }
+    warn(
+      '영상처럼 보이는 항목 ' + res.candidates + '개를 찾았지만 필드를 읽지 못했습니다.\n' +
+      '  엔드포인트: ' + key + '\n' +
+      '  샘플 항목의 키: ' + (keys.length ? keys.join(', ') : '(없음)') + '\n' +
+      '  → src/inject.js 의 ' + (PLATFORM === 'tiktok' ? 'tiktokItem()' : 'instagramItem()') +
+      ' 이 읽는 필드명과 위 키를 비교해 고치세요.\n' +
+      '  → 콘솔에 window.__FS_LAST_UNPARSED__ 를 입력하면 항목 원본을 볼 수 있습니다.',
+      res.sample
+    );
   }
 
   /* ========================= 3. fetch 후킹 ========================= */
