@@ -30,6 +30,7 @@
     showTier: true,
     showDate: false,
     showDownload: true,
+    showTags: true,
     byDomain: {}          // { 'tiktok.com': 'views', 'instagram.com': 'original' }
   };
 
@@ -41,7 +42,8 @@
     settings: Object.assign({}, DEFAULTS),
     reordering: false,
     lastUrl: location.href,
-    lastWarn: 0
+    lastWarn: 0,
+    lastScrollT: 0        // 마지막 스크롤 시각 — 이 직후에는 재정렬을 미룹니다
   };
 
   const keyOfItem = (it) => PLATFORM === 'tiktok' ? String(it.id) : String(it.code || it.id);
@@ -289,6 +291,49 @@
     cell.appendChild(btn);
   }
 
+  /* ── 해시태그 칩: 좌상단, 클릭하면 새 탭에서 그 태그 검색 ── */
+  function tagUrl(tag) {
+    const base = PLATFORM === 'tiktok' ? C.TIKTOK.TAG_URL : C.INSTAGRAM.TAG_URL;
+    return base + encodeURIComponent(tag) + (PLATFORM === 'instagram' ? '/' : '');
+  }
+  function tagChip(tag) {
+    const el = document.createElement('span');
+    el.className = 'fs-tag';
+    el.textContent = '#' + tag;
+    el.title = '#' + tag + ' 검색 (새 탭)';
+    /* 캡처 단계에서 잡아 바깥 카드 링크가 열리지 않게 막습니다 */
+    el.addEventListener('click', function (ev) {
+      ev.preventDefault(); ev.stopPropagation();
+      window.open(tagUrl(tag), '_blank', 'noopener');
+    }, true);
+    return el;
+  }
+  function ensureTags(host, item) {
+    let box = host.querySelector(':scope > .fs-tags');
+    const tags = Array.isArray(item.tags) ? item.tags : [];
+    if (!S.settings.showTags || !tags.length) { if (box) box.remove(); return; }
+    const sig = tags.join('|');
+    if (box && box.dataset.sig === sig) return;          /* 변화 없으면 다시 그리지 않음 */
+    if (!box) { box = document.createElement('div'); box.className = 'fs-tags'; host.appendChild(box); }
+    box.dataset.sig = sig;
+    box.innerHTML = '';
+    const max = C.MAX_TAG_CHIPS;
+    tags.slice(0, max).forEach(function (t) { box.appendChild(tagChip(t)); });
+    if (tags.length > max) {
+      const more = document.createElement('span');
+      more.className = 'fs-tag fs-tag-more';
+      more.textContent = '+' + (tags.length - max);
+      more.title = '나머지 해시태그 ' + (tags.length - max) + '개 보기';
+      more.addEventListener('click', function (ev) {
+        ev.preventDefault(); ev.stopPropagation();
+        box.innerHTML = '';
+        tags.forEach(function (t) { box.appendChild(tagChip(t)); });
+        box.dataset.sig = sig + '#all';
+      }, true);
+      box.appendChild(more);
+    }
+  }
+
   /* 테두리는 썸네일(host)에 그립니다. 카드 전체에 그리면 아래 캡션 위를 덮습니다. */
   function applyTier(host, item) {
     host.classList.remove('fs-gold', 'fs-green');
@@ -306,6 +351,7 @@
       host.classList.add('fs-host');
       ensureBadge(host, item);
       ensureDownload(host, item);
+      ensureTags(host, item);
       applyTier(host, item);
       const min = Number(S.settings.minViews) || 0;
       const v = Number(item.views);
@@ -405,6 +451,48 @@
     timer = setTimeout(function () { timer = null; run(); }, C.DEBOUNCE_MS);
   }
 
+  /**
+   * 재정렬 전후로 "보고 있던 카드"의 화면 위치를 그대로 유지합니다.
+   * 새 카드가 화면 위쪽에 끼어들면 그만큼 스크롤을 보정해 시야가 튕기지 않게 합니다.
+   * 앵커는 이미 데이터가 붙어 정렬 자리가 안정된(fs-cell) 카드 중 화면 안 맨 위 것.
+   */
+  function pickAnchor(found) {
+    let best = null, bestTop = Infinity;
+    const vh = window.innerHeight || 800;
+    for (let i = 0; i < found.length; i++) {
+      const el = found[i].cell;
+      if (!el.classList.contains('fs-cell')) continue;
+      const r = el.getBoundingClientRect();
+      if (r.bottom <= 0 || r.top >= vh) continue;
+      if (r.top < bestTop) { bestTop = r.top; best = el; }
+    }
+    return best ? { el: best, top: bestTop } : null;
+  }
+  /** 이 요소를 실제로 스크롤하는 컨테이너 (없으면 window) */
+  function scrollerOf(el) {
+    let n = el.parentElement;
+    while (n && n !== document.body && n !== document.documentElement) {
+      try {
+        const oy = getComputedStyle(n).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && n.scrollHeight > n.clientHeight + 1) return n;
+      } catch (e) { break; }
+      n = n.parentElement;
+    }
+    return window;
+  }
+  function anchoredReorder(found) {
+    const a = pickAnchor(found);
+    reorder(found);
+    if (!a || !a.el.isConnected) return;
+    try {
+      const delta = a.el.getBoundingClientRect().top - a.top;
+      if (Math.abs(delta) < 1) return;
+      const sc = scrollerOf(a.el);
+      if (sc === window) window.scrollBy(0, delta);
+      else sc.scrollTop += delta;
+    } catch (e) { /* 보정 실패는 무시 */ }
+  }
+
   function run() {
     try {
       const found = collectCells();
@@ -413,10 +501,22 @@
         const item = S.items.get(f.key);
         if (item) { matched++; decorate(f.cell, item); }
       });
-      reorder(found);
+
+      /* 스크롤 중에는 뱃지만 붙이고 재정렬은 손을 뗀 뒤로 미룹니다 */
+      const sinceScroll = Date.now() - S.lastScrollT;
+      if (sinceScroll >= C.SCROLL_IDLE_MS) {
+        anchoredReorder(found);
+      } else {
+        setTimeout(schedule, C.SCROLL_IDLE_MS - sinceScroll + 10);
+      }
       diagnose(found.length, matched);
     } catch (e) {
       C.warn('처리 중 예외(페이지는 정상):', e && e.message);
+    } finally {
+      /* 위에서 우리가 만든 DOM 변경(뱃지·이동)이 관찰자를 다시 깨우지 않게 버립니다.
+         S.reordering 플래그만으로는 막을 수 없습니다 — 관찰자 콜백은 이 함수가
+         끝난 뒤 마이크로태스크로 오므로 그때는 이미 플래그가 내려가 있습니다. */
+      try { mo.takeRecords(); } catch (e) { /* noop */ }
     }
   }
 
@@ -446,6 +546,10 @@
     try {
       if (document.body) mo.observe(document.body, { childList: true, subtree: true });
     } catch (e) { C.warn('MutationObserver 등록 실패:', e && e.message); }
+    /* scroll 은 버블링하지 않으므로 capture 로 잡아야 스크롤 컨테이너까지 보입니다 */
+    try {
+      document.addEventListener('scroll', function () { S.lastScrollT = Date.now(); }, { capture: true, passive: true });
+    } catch (e) { /* noop */ }
   }
 
   function resetForNavigation() {
@@ -518,6 +622,7 @@
       });
       if (!S.settings.showBadge) document.querySelectorAll('.fs-badge').forEach(function (el) { el.remove(); });
       if (!S.settings.showDownload) document.querySelectorAll('.fs-dl').forEach(function (el) { el.remove(); });
+      if (!S.settings.showTags) document.querySelectorAll('.fs-tags').forEach(function (el) { el.remove(); });
     } catch (e) { /* noop */ }
     schedule();
   }
@@ -547,7 +652,7 @@
         url: it.url, platform: it.platform, author: it.author,
         views: it.views, likes: it.likes, comments: it.comments,
         createTime: it.createTime, date: C.fmtDate(it.createTime),
-        caption: it.caption, onScreen: S.cells.has(k)
+        caption: it.caption, tags: it.tags || [], onScreen: S.cells.has(k)
       });
     });
     return arr;

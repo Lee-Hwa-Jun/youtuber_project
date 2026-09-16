@@ -106,6 +106,21 @@
     }
   }
 
+  /** 캡션 전문에서 #해시태그 추출 (한글·유니코드 포함, 대소문자 무시 중복 제거) */
+  function extractTags(text) {
+    const out = [], seen = {};
+    try {
+      const re = /#([\p{L}\p{N}_]+)/gu;
+      const src = String(text || '');
+      let m;
+      while ((m = re.exec(src)) && out.length < 30) {
+        const k = m[1].toLowerCase();
+        if (!seen[k]) { seen[k] = 1; out.push(m[1]); }
+      }
+    } catch (e) { /* noop */ }
+    return out;
+  }
+
   function num(v) {
     if (v === null || v === undefined || v === '') return null;
     const n = Number(v);
@@ -153,6 +168,7 @@
       createTime: pick(o.createTime, o.create_time, o.createTimeISO && Date.parse(o.createTimeISO) / 1000),
       mediaUrl: v.downloadAddr || v.playAddr || v.download_addr || v.play_addr || '',
       caption: String(o.desc || '').slice(0, 300),
+      tags: extractTags(o.desc),          /* 자르기 전 전문에서 추출 */
       duration: pick(v.duration)
     };
   }
@@ -219,6 +235,7 @@
       createTime: pick(o.taken_at, o.taken_at_timestamp, o.device_timestamp && null),
       mediaUrl: media,
       caption: String((o.caption && (o.caption.text || o.caption)) || '').slice(0, 300),
+      tags: extractTags(o.caption && (o.caption.text || o.caption)),
       duration: pick(o.video_duration)
     };
   }

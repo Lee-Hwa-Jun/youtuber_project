@@ -11,6 +11,7 @@ const DEFAULTS = {
   showTier: true,
   showDate: false,
   showDownload: true,
+  showTags: true,
   byDomain: {}
 };
 
@@ -84,6 +85,7 @@ function syncInputs() {
   $('#showTier').checked = !!settings.showTier;
   $('#showDate').checked = !!settings.showDate;
   $('#showDownload').checked = !!settings.showDownload;
+  $('#showTags').checked = !!settings.showTags;
 }
 
 /* ------------------------------ 이벤트 ------------------------------ */
@@ -104,7 +106,7 @@ function bind() {
   $('#minViews').addEventListener('keydown', function (e) { if (e.key === 'Enter') applyMin(); });
 
   [['showBadge', 'showBadge'], ['showTier', 'showTier'],
-   ['showDate', 'showDate'], ['showDownload', 'showDownload']].forEach(function (p) {
+   ['showDate', 'showDate'], ['showDownload', 'showDownload'], ['showTags', 'showTags']].forEach(function (p) {
     $('#' + p[0]).addEventListener('change', function (e) {
       const patch = {}; patch[p[1]] = e.target.checked; save(patch);
     });
@@ -139,11 +141,12 @@ function exportCsv() {
     const items = res.items || [];
     if (!items.length) { alert('아직 수집된 데이터가 없습니다.\n피드를 조금 둘러본 뒤 다시 시도하세요.'); return; }
 
-    const head = ['영상URL', '플랫폼', '작성자', '조회수', '좋아요', '댓글수', '게시일'];
+    const head = ['영상URL', '플랫폼', '작성자', '조회수', '좋아요', '댓글수', '게시일', '해시태그'];
     const q = (s) => '"' + String(s === null || s === undefined ? '' : s).replace(/"/g, '""') + '"';
     const lines = [head.map(q).join(',')];
     items.forEach(function (it) {
-      lines.push([it.url, it.platform, it.author, it.views, it.likes, it.comments, it.date].map(q).join(','));
+      const tags = (it.tags || []).map(function (t) { return '#' + t; }).join(' ');
+      lines.push([it.url, it.platform, it.author, it.views, it.likes, it.comments, it.date, tags].map(q).join(','));
     });
 
     const bom = String.fromCharCode(0xFEFF);

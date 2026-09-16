@@ -28,6 +28,11 @@
     DEBOUNCE_MS: 180,
     /* SPA URL 변경 폴링 주기(ms) */
     URL_POLL_MS: 600,
+    /* 스크롤이 멈춘 뒤 이만큼 지나야 재정렬합니다. 스크롤 도중 DOM 을 옮기면
+       보고 있던 위치가 튕기므로, 손을 뗀 다음에만 정리합니다. */
+    SCROLL_IDLE_MS: 250,
+    /* 카드에 바로 보여줄 해시태그 칩 수 (나머지는 +N 으로 접어둠) */
+    MAX_TAG_CHIPS: 3,
     /* JSON 재귀 탐색 상한 (무한 루프·성능 사고 방지) */
     WALK_MAX_DEPTH: 20,   /* Instagram GraphQL 은 꽤 깊게 중첩됩니다 */
     WALK_MAX_NODES: 40000,
@@ -48,6 +53,8 @@
       INITIAL_STATE_IDS: ['SIGI_STATE', '__UNIVERSAL_DATA_FOR_REHYDRATION__'],
       /* 카드 ↔ 영상 id 매핑에 쓰는 링크 패턴 (a[href] 에서 추출) */
       ITEM_LINK_RE: '/@([\\w.\\-]+)/video/(\\d+)',
+      /* 해시태그 칩 클릭 시 열 검색 페이지 */
+      TAG_URL: 'https://www.tiktok.com/tag/',
       /* 그리드 컨테이너 후보 (빠른 경로). 실패하면 자동 탐지로 넘어갑니다. */
       GRID_SELECTORS: [
         '[data-e2e="search_top-item-list"]',
@@ -70,6 +77,7 @@
       ],
       INITIAL_STATE_IDS: [],
       ITEM_LINK_RE: '/(?:reel|reels|p|tv)/([A-Za-z0-9_\\-]{5,})',
+      TAG_URL: 'https://www.instagram.com/explore/tags/',
       GRID_SELECTORS: [
         'main article',
         'main [style*="flex-direction: column"]'
