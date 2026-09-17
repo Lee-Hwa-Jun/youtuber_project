@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>수면 주파수 영상 · 소스 생성기</title>
+<style>
+:root{
+  --bg:#0c0f14; --panel:#141922; --panel2:#1b222d; --panel3:#232c38;
+  --line:#2a3441; --line2:#3a4656;
+  --text:#e8eef6; --muted:#93a2b4; --dim:#69788a;
+  --accent:#8b7cf6; --accent-ink:#fff;
+  --good:#0ca30c; --warning:#fab219; --critical:#d03b3b;
+  --radius:13px; --shadow:0 10px 30px rgba(0,0,0,.45);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--text);
+  font:14px/1.55 "Pretendard","Apple SD Gothic Neo","Malgun Gothic",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+button,input,select{font:inherit;color:inherit}
+a{color:var(--accent)}
+.app{max-width:1240px;margin:0 auto;padding:0 18px 60px;padding-top:env(safe-area-inset-top,0px)}
+.topbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:15px 0 12px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:17px;letter-spacing:-.3px;white-space:nowrap}
+.brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(139,124,246,.22)}
+.brand small{display:block;font-weight:500;font-size:11px;color:var(--dim);letter-spacing:0}
+.tabs{display:flex;gap:4px;padding:10px 0 0;border-bottom:1px solid var(--line);margin-bottom:18px}
+.tab{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:9px 14px;cursor:pointer;font-weight:700;font-size:13.5px;border-radius:8px 8px 0 0}
+.tab:hover{color:var(--text);background:var(--panel2)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+.btn{background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:8px 13px;border-radius:10px;cursor:pointer;white-space:nowrap;transition:.14s;font-size:13px;font-weight:600}
+.btn:hover{background:var(--panel3);border-color:var(--line2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.1)}
+.btn.danger{color:#ff7b7b;border-color:var(--line)}
+.btn.danger:hover{background:rgba(208,59,59,.14);border-color:var(--critical)}
+.btn.sm{padding:5px 9px;font-size:12px;border-radius:8px}
+.btn.xs{padding:3px 8px;font-size:11px;border-radius:7px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.input,select{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 11px;width:100%;outline:none}
+.input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(139,124,246,.18)}
+label.f{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin:0 0 5px;font-weight:600}
+label.f b{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent);margin:2px 0 0}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+.card h3{margin:0 0 12px;font-size:15px;letter-spacing:-.2px}
+.card h3 .sub{font-weight:500;font-size:12px;color:var(--dim);margin-left:6px}
+.muted{color:var(--muted)} .dim{color:var(--dim)}
+.tip{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:10px;padding:11px 13px;font-size:12.5px;color:var(--muted);margin-bottom:14px}
+.tip b{color:var(--text)} .tip.warn{border-left-color:var(--warning)} .tip.crit{border-left-color:var(--critical)}
+.fields{display:flex;flex-direction:column;gap:12px}
+fieldset{border:none;padding:0;margin:0;min-width:0}
+fieldset:disabled{opacity:.55}
+.divider{height:1px;background:var(--line);margin:14px 0}
+
+/* 비주얼 */
+.vis{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}
+.preview{background:#000;border:1px solid var(--line);border-radius:12px;overflow:hidden;position:relative}
+.preview canvas{display:block;width:100%;height:auto;background:#000}
+.preview .ovl{position:absolute;left:10px;top:10px;display:flex;gap:6px;flex-wrap:wrap}
+.chip{background:rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.14);color:#dfe7f2;font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;backdrop-filter:blur(3px)}
+.chip.rec{background:rgba(208,59,59,.85);border-color:transparent;color:#fff}
+.chip.rec::before{content:"●";margin-right:5px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:.25}}
+.pats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.pat{background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:9px 6px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;transition:.13s;text-align:center}
+.pat:hover{background:var(--panel3);border-color:var(--line2)}
+.pat.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.pat small{display:block;font-weight:500;font-size:10px;opacity:.75;margin-top:1px}
+.pals{display:flex;gap:6px}
+.pal{flex:1;height:30px;border-radius:8px;border:2px solid transparent;cursor:pointer;position:relative}
+.pal.on{border-color:#fff;box-shadow:0 0 0 2px var(--accent)}
+.pal span{position:absolute;inset:auto 0 -17px 0;text-align:center;font-size:10px;color:var(--dim);font-weight:700}
+.prog{height:8px;background:var(--panel3);border-radius:20px;overflow:hidden}
+.prog>i{display:block;height:100%;background:var(--accent);border-radius:20px;transition:width .2s}
+.prog.rec>i{background:var(--critical)}
+.stat{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:12px;color:var(--muted)}
+.stat b{color:var(--text);font-variant-numeric:tabular-nums}
+
+/* 음원 */
+.aud{display:grid;grid-template-columns:1fr;gap:14px}
+.freq-item{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
+.freq-head{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap}
+.freq-hz{font-size:22px;font-weight:800;letter-spacing:-.8px;font-variant-numeric:tabular-nums}
+.freq-hz small{font-size:12px;color:var(--dim);font-weight:600;letter-spacing:0;margin-left:3px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.hzchip{background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:4px 10px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer}
+.hzchip:hover{background:var(--panel3);border-color:var(--accent)}
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:20px;border:1px solid transparent;white-space:nowrap}
+.b-gray{background:var(--panel3);color:var(--muted);border-color:var(--line)}
+.b-accent{background:rgba(139,124,246,.16);color:#b9aeff;border-color:rgba(139,124,246,.42)}
+
+.empty{border:1.5px dashed var(--line2);border-radius:var(--radius);padding:26px 20px;text-align:center;background:var(--panel)}
+.empty .ico{font-size:32px;line-height:1;margin-bottom:8px}
+.empty h4{margin:0 0 6px;font-size:15px}
+.empty p{margin:0 auto;max-width:560px;color:var(--muted);font-size:13px}
+.empty ol{text-align:left;max-width:560px;margin:10px auto 0;color:var(--muted);font-size:13px;padding-left:20px}
+
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;z-index:200;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+.toast{background:var(--panel3);border:1px solid var(--line2);padding:10px 16px;border-radius:12px;box-shadow:var(--shadow);font-size:13px;font-weight:600;animation:tin .25s;max-width:90vw}
+.toast.ok{border-color:var(--good)} .toast.err{border-color:var(--critical)}
+@keyframes tin{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.banner{display:none;background:rgba(250,178,25,.12);border:1px solid rgba(250,178,25,.5);color:#ffd77a;border-radius:10px;padding:9px 13px;font-size:12.5px;font-weight:700;margin-bottom:12px}
+.banner.on{display:block}
+.foot-note{margin-top:28px;padding-top:14px;border-top:1px solid var(--line);color:var(--dim);font-size:11.5px;text-align:center}
+@media(max-width:900px){.vis{grid-template-columns:1fr}.g3{grid-template-columns:1fr}}
+@media(max-width:700px){.app{padding:0 12px 50px}.pats{grid-template-columns:1fr 1fr}.g2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><span class="dot"></span><span>소스 생성기<small>수면 주파수 영상용 · 영상(webm) + 음원(wav) 따로 뽑기</small></span></div>
+  </header>
+  <nav class="tabs">
+    <button class="tab active" data-tab="vis">🌌 비주얼 생성기</button>
+    <button class="tab" data-tab="aud">🎧 주파수 음원 생성기</button>
+  </nav>
+  <div class="banner" id="visBanner"></div>
+  <main id="view"></main>
+  <div class="foot-note">모든 파일은 브라우저 저장 대화상자로 내려받습니다 · 서버로 전송되는 것은 없습니다</div>
+</div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* ============================================================================
+   소스 생성기 — 수면 주파수 영상용 영상(webm)·음원(wav) 소스
+   ============================================================================ */
+var TAU = Math.PI * 2;
+function $(s, r) { return (r || document).querySelector(s); }
+function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
+function on(s, ev, fn, r) { $$(s, r).forEach(function (n) { n.addEventListener(ev, fn); }); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function toast(msg, kind) {
+  var box = $('#toast'), t = document.createElement('div');
+  t.className = 'toast ' + (kind || ''); t.textContent = msg; box.appendChild(t);
+  setTimeout(function () { t.style.transition = '.3s'; t.style.opacity = '0'; setTimeout(function () { t.remove(); }, 320); }, 3200);
+}
+function download(filename, blob) {
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a'); a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 1500);
+}
+function fmtSec(s) { s = Math.round(s); var m = Math.floor(s / 60), r = s % 60; return m ? m + '분' + (r ? ' ' + r + '초' : '') : r + '초'; }
+function fmtBytes(b) { return b >= 1e9 ? (b / 1e9).toFixed(2) + ' GB' : b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : Math.round(b / 1e3) + ' KB'; }
+/* 시드 난수 (mulberry32) — 새로고침해도 같은 배치가 나오게 */
+function rng(seed) { var a = seed >>> 0; return function () { a = (a + 0x6D2B79F5) >>> 0; var t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+/* ==========================================================================
+   1. 비주얼 — 팔레트 · 프리셋 · 상태
+   ========================================================================== */
+var PALETTES = {
+  indigo: { name: '남색',  bg: [10, 16, 40],  c: [[60, 80, 220], [110, 70, 200], [40, 120, 200]] },
+  purple: { name: '보라',  bg: [22, 10, 36],  c: [[150, 70, 220], [220, 90, 190], [90, 60, 200]] },
+  teal:   { name: '청록',  bg: [6, 24, 30],   c: [[40, 190, 180], [50, 130, 200], [90, 220, 170]] },
+  amber:  { name: '앰버',  bg: [30, 18, 6],   c: [[240, 150, 50], [220, 90, 60], [255, 200, 90]] },
+  mono:   { name: '모노',  bg: [14, 14, 16],  c: [[190, 195, 205], [130, 135, 145], [230, 232, 236]] }
+};
+/* 프리셋별 기본 주기(초). 모든 시간 항의 계수를 정수로 두어 이 주기에서 완벽히 루프합니다. */
+var PATTERNS = {
+  nebula:    { name: '네뷸라',     desc: '유영하는 성운',      base: 60 },
+  stars:     { name: '별밭',       desc: '깜빡임 + 유성',      base: 90 },
+  breath:    { name: '숨쉬는 원',  desc: '호흡 유도 리듬',     base: 60 },
+  aurora:    { name: '오로라',     desc: '하단 빛 커튼',       base: 48 },
+  smoke:     { name: '유체 연기',  desc: '흐르는 노이즈 결',   base: 60 },
+  fireflies: { name: '반딧불',     desc: '부유하는 빛 입자',   base: 60 }
+};
+var RESOLUTIONS = { '1920x1080': [1920, 1080], '3840x2160': [3840, 2160], '1080x1920': [1080, 1920] };
+var DURATIONS = [10, 30, 60, 180, 300];
+
+var V = {   /* 비주얼 상태 */
+  pattern: 'nebula', palette: 'indigo', speed: 1, density: 0.5, glow: 0.6, bgLevel: 0.25, breathSec: 6,
+  res: '1920x1080', fps: 30, dur: 60, mbps: 16,
+  recording: false, recStart: 0, recDur: 0, hiddenDuringRec: false, recorder: null, chunks: [], stream: null,
+  seed: 7, clockStart: performance.now()
+};
+var UI = { tab: 'vis' };
+var cv = document.createElement('canvas'), g = null;
+var work = document.createElement('canvas'), wg = null;   /* 픽셀 패턴용 저해상 작업 캔버스 */
+
+function period() {
+  var base = PATTERNS[V.pattern].base;
+  if (V.pattern === 'breath') base = V.breathSec * Math.max(1, Math.round(60 / V.breathSec));
+  return base / V.speed;
+}
+/** 녹화 길이를 주기의 정수배로 스냅 (최소 1주기) */
+function snapDuration(sec, P) { return Math.max(1, Math.round(sec / P)) * P; }
+function bgColor() {
+  var p = PALETTES[V.palette];
+  return [lerp(0, p.bg[0], V.bgLevel), lerp(0, p.bg[1], V.bgLevel), lerp(0, p.bg[2], V.bgLevel)];
+}
+function rgba(c, a) { return 'rgba(' + Math.round(c[0]) + ',' + Math.round(c[1]) + ',' + Math.round(c[2]) + ',' + a + ')'; }
+
+/* ==========================================================================
+   2. 패턴 렌더러 — 전부 위상 t∈[0,1) 로만 그립니다. 시간 계수는 정수만.
+   ========================================================================== */
+var cache = { key: '', items: null };
+function layout(n, fn) {   /* 밀도·시드가 바뀔 때만 배치 재생성 */
+  var key = V.pattern + '|' + n + '|' + V.seed + '|' + cv.width + 'x' + cv.height;
+  if (cache.key !== key) { var r = rng(V.seed * 1000 + n); cache = { key: key, items: [] }; for (var i = 0; i < n; i++) cache.items.push(fn(r, i)); }
+  return cache.items;
+}
+function fill(ctx, W, H) { var b = bgColor(); ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = rgba(b, 1); ctx.fillRect(0, 0, W, H); }
+
+function drawNebula(ctx, W, H, t) {
+  fill(ctx, W, H);
+  var pal = PALETTES[V.palette], n = Math.round(lerp(4, 14, V.density));
+  var blobs = layout(n, function (r, i) {
+    return { ax: 0.15 + r() * 0.3, ay: 0.15 + r() * 0.3, kx: 1 + Math.floor(r() * 2), ky: 1 + Math.floor(r() * 2),
+             px: r(), py: r(), rad: 0.25 + r() * 0.35, kr: 1 + Math.floor(r() * 2), pr: r(), ci: i % 3, a: 0.35 + r() * 0.4 };
+  });
+  ctx.globalCompositeOperation = 'lighter';
+  var R = Math.max(W, H);
+  blobs.forEach(function (b) {
+    var cx = W * (0.5 + b.ax * Math.sin(TAU * (b.kx * t + b.px)));
+    var cy = H * (0.5 + b.ay * Math.cos(TAU * (b.ky * t + b.py)));
+    var rad = R * b.rad * (1 + 0.15 * Math.sin(TAU * (b.kr * t + b.pr))) * lerp(0.7, 1.2, V.glow);
+    var grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad);
+    var c = pal.c[b.ci], a = b.a * lerp(0.35, 0.9, V.glow);
+    grd.addColorStop(0, rgba(c, a * 0.55)); grd.addColorStop(0.45, rgba(c, a * 0.18)); grd.addColorStop(1, rgba(c, 0));
+    ctx.fillStyle = grd; ctx.fillRect(cx - rad, cy - rad, rad * 2, rad * 2);
+  });
+}
+function drawStars(ctx, W, H, t) {
+  fill(ctx, W, H);
+  var pal = PALETTES[V.palette], n = Math.round(lerp(150, 900, V.density));
+  var stars = layout(n, function (r) {
+    return { x: r(), y: r(), s: 0.6 + r() * 1.8, k: 1 + Math.floor(r() * 4), p: r(), c: r() < 0.8 ? 2 : Math.floor(r() * 2) };
+  });
+  var sc = Math.min(W, H) / 1080;
+  ctx.globalCompositeOperation = 'lighter';
+  stars.forEach(function (s) {
+    var x = ((s.x + t * 0.5 * 1) % 1) * W;         /* 주기당 화면 절반 이동… 정수 랩이 필요 → 아래처럼 */
+    x = ((s.x + t) % 1) * W;                        /* 주기당 정확히 1회 랩(정수) */
+    var y = ((s.y + t * 0) % 1) * H;
+    var tw = 0.55 + 0.45 * Math.sin(TAU * (s.k * t + s.p));
+    var rad = s.s * sc * lerp(1, 2.2, V.glow);
+    var c = pal.c[s.c];
+    ctx.fillStyle = rgba([lerp(c[0], 255, .6), lerp(c[1], 255, .6), lerp(c[2], 255, .6)], tw * lerp(0.5, 1, V.glow));
+    ctx.beginPath(); ctx.arc(x, y, rad, 0, TAU); ctx.fill();
+    if (V.glow > 0.4 && s.s > 1.8) {
+      var grd = ctx.createRadialGradient(x, y, 0, x, y, rad * 6);
+      grd.addColorStop(0, rgba(c, 0.25 * tw * V.glow)); grd.addColorStop(1, rgba(c, 0));
+      ctx.fillStyle = grd; ctx.fillRect(x - rad * 6, y - rad * 6, rad * 12, rad * 12);
+    }
+  });
+  /* 유성: 주기 안 정해진 위상에 M개, 각 1.6초 동안 — 위상 기반이라 루프에서도 같은 자리 */
+  var P = period(), M = 3, life = 1.6 / P;
+  var mets = layout(M + 1000, function (r, i) { return { at: r(), x0: r(), y0: r() * 0.5, dx: 0.12 + r() * 0.15, dy: 0.08 + r() * 0.1 }; }).slice(0, M);
+  mets.forEach(function (m) {
+    var d = ((t - m.at) % 1 + 1) % 1; if (d > life) return;
+    var p = d / life, x = (m.x0 + m.dx * p) * W, y = (m.y0 + m.dy * p) * H, len = 0.06 * W;
+    var grd = ctx.createLinearGradient(x - len, y - len * 0.6, x, y);
+    var a = Math.sin(Math.PI * p) * 0.9;
+    grd.addColorStop(0, 'rgba(255,255,255,0)'); grd.addColorStop(1, 'rgba(255,255,255,' + a + ')');
+    ctx.strokeStyle = grd; ctx.lineWidth = 2 * sc; ctx.beginPath(); ctx.moveTo(x - len, y - len * 0.6); ctx.lineTo(x, y); ctx.stroke();
+  });
+}
+function drawBreath(ctx, W, H, t) {
+  fill(ctx, W, H);
+  var pal = PALETTES[V.palette], cycles = Math.max(1, Math.round(60 / V.breathSec));
+  var b = 0.5 - 0.5 * Math.cos(TAU * cycles * t);          /* 0(호기)→1(흡기) 부드럽게 */
+  var cx = W / 2, cy = H / 2, R = Math.min(W, H) * 0.42, rings = Math.round(lerp(3, 9, V.density));
+  ctx.globalCompositeOperation = 'lighter';
+  var core = R * lerp(0.28, 0.72, b) * lerp(0.85, 1.05, V.glow);
+  var grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, core * 1.6);
+  var c = pal.c[0];
+  grd.addColorStop(0, rgba(c, 0.45 * lerp(0.6, 1, V.glow))); grd.addColorStop(0.5, rgba(c, 0.14 * lerp(0.6, 1, V.glow))); grd.addColorStop(1, rgba(c, 0));
+  ctx.fillStyle = grd; ctx.fillRect(0, 0, W, H);
+  for (var i = 1; i <= rings; i++) {
+    var rr = core * (0.55 + i / rings * 0.9);
+    var a = (1 - i / (rings + 1)) * 0.35 * lerp(0.5, 1, V.glow) * (0.6 + 0.4 * b);
+    ctx.strokeStyle = rgba(pal.c[i % 3], a); ctx.lineWidth = Math.max(1, Math.min(W, H) * 0.0025);
+    ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU); ctx.stroke();
+  }
+}
+function drawAurora(ctx, W, H, t) {
+  fill(ctx, W, H);
+  var pal = PALETTES[V.palette], bands = Math.round(lerp(2, 5, V.density));
+  var waves = layout(bands, function (r, i) {
+    return { k1: 1 + Math.floor(r() * 2), m1: 1 + Math.floor(r() * 2), p1: r(), k2: 2 + Math.floor(r() * 3), m2: 1 + Math.floor(r() * 3), p2: r(),
+             base: 0.62 + i * 0.07, h: 0.18 + r() * 0.14, ci: i % 3, a: 0.5 - i * 0.07 };
+  });
+  /* 커튼 하나를 "세로 띠 여러 개"가 아니라 "그라디언트로 채운 폴리곤 하나"로 그립니다.
+     띠로 그리면 lighter 합성에서 띠 경계가 겹쳐 세로줄 아티팩트가 생깁니다. */
+  ctx.globalCompositeOperation = 'lighter';
+  var N = 160;
+  waves.forEach(function (w) {
+    var c = pal.c[w.ci], top = H * (w.base - w.h), bot = H * (w.base + 0.06);
+    var grd = ctx.createLinearGradient(0, top, 0, bot);
+    var a = w.a * lerp(0.5, 1, V.glow);
+    grd.addColorStop(0, rgba(c, 0)); grd.addColorStop(0.45, rgba(c, a * 0.5)); grd.addColorStop(1, rgba(c, a * 0.06));
+    ctx.fillStyle = grd;
+    ctx.beginPath(); ctx.moveTo(0, bot);
+    for (var i = 0; i <= N; i++) {
+      var u = i / N;
+      var sv = 0.5 + 0.35 * Math.sin(TAU * (w.k1 * u + w.m1 * t + w.p1)) + 0.15 * Math.sin(TAU * (w.k2 * u - w.m2 * t + w.p2));
+      ctx.lineTo(u * W, H * (w.base - w.h * sv));
+    }
+    ctx.lineTo(W, bot); ctx.closePath(); ctx.fill();
+  });
+}
+function drawSmoke(ctx, W, H, t) {
+  /* 저해상 작업 캔버스에 그린 뒤 확대 — 4K 에서도 가볍게.
+     축에 정렬된 sin×cos 곱은 격자 무늬가 생기므로, 임의 방향의 평면파를 합치고
+     좌표를 살짝 비틀어(domain warp) 연기 결을 만듭니다. 시간 계수는 전부 정수 → 루프 안전. */
+  var ww = 192, hh = Math.max(24, Math.round(ww * H / W));
+  if (work.width !== ww || work.height !== hh) { work.width = ww; work.height = hh; wg = work.getContext('2d'); }
+  var img = wg.createImageData(ww, hh), d = img.data;
+  var pal = PALETTES[V.palette], bg = bgColor(), oct = Math.round(lerp(4, 8, V.density));
+  var octs = layout(oct, function (r, i) {
+    var th = r() * TAU;
+    return { dx: Math.cos(th), dy: Math.sin(th), k: 1 + Math.floor(r() * 3) + Math.floor(i / 2), m: 1 + Math.floor(r() * 2), p: r(), amp: 1 / (1 + i * 0.6) };
+  });
+  var norm = 0; octs.forEach(function (o) { norm += o.amp; });
+  var asp = H / W, w0 = octs[0], w1 = octs[1] || octs[0], gpow = lerp(2.0, 1.2, V.glow), kmax = lerp(0.35, 0.8, V.glow);
+  var c0 = pal.c[0], c1 = pal.c[1];
+  for (var y = 0; y < hh; y++) for (var x = 0; x < ww; x++) {
+    var u = x / ww, v = (y / hh) * asp;
+    var wx = 0.06 * Math.sin(TAU * (2 * u + w0.m * t + w0.p)), wy = 0.06 * Math.cos(TAU * (2 * v - w1.m * t + w1.p));
+    var px = u + wx, py = v + wy, sum = 0;
+    for (var i = 0; i < octs.length; i++) {
+      var o = octs[i];
+      sum += o.amp * Math.sin(TAU * (o.k * (px * o.dx + py * o.dy) + o.m * t + o.p));
+    }
+    var sv = Math.pow(clamp(sum / norm * 0.5 + 0.5, 0, 1), gpow), k = sv * kmax;
+    var idx = (y * ww + x) * 4;
+    d[idx]     = bg[0] + (lerp(c0[0], c1[0], sv) - bg[0]) * k;
+    d[idx + 1] = bg[1] + (lerp(c0[1], c1[1], sv) - bg[1]) * k;
+    d[idx + 2] = bg[2] + (lerp(c0[2], c1[2], sv) - bg[2]) * k;
+    d[idx + 3] = 255;
+  }
+  wg.putImageData(img, 0, 0);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(work, 0, 0, W, H);
+}
+function drawFireflies(ctx, W, H, t) {
+  fill(ctx, W, H);
+  var pal = PALETTES[V.palette], n = Math.round(lerp(20, 120, V.density));
+  var ps = layout(n, function (r) {
+    return { cx: r(), cy: r(), ax: 0.05 + r() * 0.15, ay: 0.05 + r() * 0.15, kx: 1 + Math.floor(r() * 3), ky: 1 + Math.floor(r() * 3),
+             px: r(), py: r(), kb: 2 + Math.floor(r() * 5), pb: r(), s: 0.6 + r() * 1.4, ci: Math.floor(r() * 3) };
+  });
+  var sc = Math.min(W, H) / 1080;
+  ctx.globalCompositeOperation = 'lighter';
+  ps.forEach(function (p) {
+    var x = ((p.cx + p.ax * Math.sin(TAU * (p.kx * t + p.px))) % 1 + 1) % 1 * W;
+    var y = ((p.cy + p.ay * Math.cos(TAU * (p.ky * t + p.py))) % 1 + 1) % 1 * H;
+    var a = Math.max(0, Math.sin(TAU * (p.kb * t + p.pb))); a = a * a;
+    var rad = p.s * 9 * sc * lerp(1, 2.4, V.glow), c = pal.c[p.ci];
+    var grd = ctx.createRadialGradient(x, y, 0, x, y, rad);
+    grd.addColorStop(0, rgba([lerp(c[0], 255, .5), lerp(c[1], 255, .5), lerp(c[2], 255, .5)], a * 0.9));
+    grd.addColorStop(0.3, rgba(c, a * 0.55 * V.glow)); grd.addColorStop(1, rgba(c, 0));
+    ctx.fillStyle = grd; ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+  });
+}
+var DRAW = { nebula: drawNebula, stars: drawStars, breath: drawBreath, aurora: drawAurora, smoke: drawSmoke, fireflies: drawFireflies };
+
+function renderAt(t) {   /* t: 위상 0..1 */
+  t = ((t % 1) + 1) % 1;
+  try { DRAW[V.pattern](g, cv.width, cv.height, t); } catch (e) { console.warn('[소스 생성기] 렌더 오류', e); }
+}
+function applyResolution() {
+  var r = RESOLUTIONS[V.res] || RESOLUTIONS['1920x1080'];
+  if (cv.width !== r[0] || cv.height !== r[1]) { cv.width = r[0]; cv.height = r[1]; g = cv.getContext('2d', { alpha: false }); cache.key = ''; }
+  if (!g) g = cv.getContext('2d', { alpha: false });
+}
+
+/* ==========================================================================
+   3. 애니메이션 루프 · 녹화 · PNG
+   ========================================================================== */
+var rafId = 0;
+function loop(now) {
+  rafId = requestAnimationFrame(loop);
+  if (UI.tab !== 'vis') return;
+  var P = period(), t;
+  if (V.recording) {
+    var el = (now - V.recStart) / 1000;
+    t = el / P;
+    renderAt(t);
+    setRecProgress(Math.min(1, el / V.recDur), el);
+    if (el >= V.recDur) stopRecording(false);
+  } else {
+    t = ((now - V.clockStart) / 1000) / P;
+    renderAt(t);
+  }
+}
+function pickMime() {
+  var list = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  for (var i = 0; i < list.length; i++) { try { if (MediaRecorder.isTypeSupported(list[i])) return list[i]; } catch (e) { /* noop */ } }
+  return '';
+}
+function startRecording(overrideSec) {
+  if (V.recording) return;
+  if (typeof MediaRecorder === 'undefined' || !cv.captureStream) { toast('이 브라우저는 캔버스 녹화를 지원하지 않습니다 (Chrome/Edge 권장)', 'err'); return; }
+  var mime = pickMime();
+  if (!mime) { toast('webm 녹화를 지원하지 않는 브라우저입니다', 'err'); return; }
+  var P = period();
+  V.recDur = snapDuration(overrideSec || V.dur, P);
+  try {
+    V.stream = cv.captureStream(V.fps);
+    V.recorder = new MediaRecorder(V.stream, { mimeType: mime, videoBitsPerSecond: V.mbps * 1e6 });
+  } catch (e) { toast('녹화를 시작할 수 없습니다: ' + e.message, 'err'); return; }
+  V.chunks = []; V.hiddenDuringRec = false;
+  V.recorder.ondataavailable = function (e) { if (e.data && e.data.size) V.chunks.push(e.data); };
+  V.recorder.onstop = function () {
+    var blob = new Blob(V.chunks, { type: mime.split(';')[0] });
+    var r = RESOLUTIONS[V.res];
+    var name = 'visual_' + V.pattern + '_' + r[0] + 'x' + r[1] + '_' + V.fps + 'fps_' + Math.round(V.recDur) + 's.webm';
+    if (blob.size) { download(name, blob); toast('녹화 완료 · ' + name + ' (' + fmtBytes(blob.size) + ')' + (V.hiddenDuringRec ? ' — 탭이 비활성화된 구간이 있어 프레임이 끊겼을 수 있습니다' : ''), V.hiddenDuringRec ? 'err' : 'ok'); }
+    else toast('녹화 데이터가 비어 있습니다', 'err');
+    V.recording = false; V.recorder = null;
+    try { V.stream.getTracks().forEach(function (tr) { tr.stop(); }); } catch (e) { /* noop */ }
+    V.lastBlob = blob;
+    render();
+  };
+  V.recording = true;
+  V.recStart = performance.now();
+  renderAt(0);                      /* 첫 프레임은 정확히 위상 0 */
+  V.recorder.start(1000);
+  render();
+}
+function stopRecording(aborted) {
+  if (!V.recording || !V.recorder) return;
+  if (aborted) { V.chunks = []; V.recorder.ondataavailable = null; V.recorder.onstop = function () { V.recording = false; V.recorder = null; try { V.stream.getTracks().forEach(function (tr) { tr.stop(); }); } catch (e) {} toast('녹화를 취소했습니다'); render(); }; }
+  try { V.recorder.stop(); } catch (e) { V.recording = false; render(); }
+}
+function setRecProgress(p, el) {
+  var bar = $('#recBar'), lab = $('#recLab');
+  if (bar) bar.style.width = Math.round(p * 100) + '%';
+  if (lab) lab.textContent = fmtSec(Math.min(el, V.recDur)) + ' / ' + fmtSec(V.recDur) + ' (' + Math.round(p * 100) + '%)';
+}
+function exportPng() {
+  var wasRec = V.recording;
+  if (!wasRec) renderAt(((performance.now() - V.clockStart) / 1000) / period());
+  cv.toBlob(function (b) {
+    if (!b) { toast('PNG 생성 실패', 'err'); return; }
+    var r = RESOLUTIONS[V.res];
+    download('still_' + V.pattern + '_' + r[0] + 'x' + r[1] + '.png', b);
+    toast('PNG 저장', 'ok');
+  }, 'image/png');
+}
+document.addEventListener('visibilitychange', function () { onVisibility(document.hidden); });
+function onVisibility(hidden) {
+  var b = $('#visBanner');
+  if (hidden && V.recording) { V.hiddenDuringRec = true; }
+  if (b) {
+    if (V.recording && (hidden || V.hiddenDuringRec)) { b.textContent = '⚠️ 녹화 중 탭이 비활성화되었습니다. 브라우저가 화면 갱신을 멈춰 프레임이 끊기거나 길이가 늘어날 수 있습니다. 이 녹화는 다시 하는 것을 권합니다.'; b.classList.add('on'); }
+    else if (!V.recording) b.classList.remove('on');
+  }
+}
+
+/* ==========================================================================
+   4. 비주얼 UI
+   ========================================================================== */
+function viewVis(v) {
+  var P = period(), snapped = snapDuration(V.dur, P), reps = Math.round(snapped / P);
+  var r = RESOLUTIONS[V.res];
+  var est = V.mbps * 1e6 / 8 * snapped;
+  var lock = V.recording ? ' disabled' : '';
+  v.innerHTML =
+  '<div class="tip">🌌 <b>사용법</b> — ① 패턴·팔레트·슬라이더로 분위기를 잡고 ② 해상도·fps·길이를 고른 뒤 ③ <b>녹화 시작</b>. ' +
+  '녹화 길이는 애니메이션 주기의 <b>정수배로 자동 스냅</b>되어 편집기에서 이어붙여도 이음새가 보이지 않습니다. 녹화 중에는 탭을 벗어나지 마세요.</div>' +
+  '<div class="vis">' +
+    '<div>' +
+      '<div class="preview" id="pv"><div class="ovl">' +
+        '<span class="chip">' + esc(PATTERNS[V.pattern].name) + ' · ' + esc(PALETTES[V.palette].name) + '</span>' +
+        '<span class="chip">' + r[0] + '×' + r[1] + ' · ' + V.fps + 'fps</span>' +
+        '<span class="chip">주기 ' + P.toFixed(1) + '초</span>' +
+        (V.recording ? '<span class="chip rec">REC</span>' : '') +
+      '</div></div>' +
+      (V.recording ?
+        '<div class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between;margin-bottom:8px"><b>녹화 중…</b><span class="dim" id="recLab">0초</span></div>' +
+        '<div class="prog rec"><i id="recBar" style="width:0%"></i></div>' +
+        '<div class="row" style="margin-top:10px"><button class="btn danger" id="recAbort">■ 취소</button><span class="dim" style="font-size:12px">끝나면 자동으로 저장 대화상자가 뜹니다</span></div></div>'
+      :
+        '<div class="row" style="margin-top:12px">' +
+          '<button class="btn primary" id="recStart">● 녹화 시작 (' + fmtSec(snapped) + ')</button>' +
+          '<button class="btn" id="pngBtn">🖼 정지 이미지 PNG</button>' +
+          '<span class="dim" style="font-size:12px">예상 용량 약 ' + fmtBytes(est) + '</span>' +
+        '</div>') +
+      '<div class="stat" style="margin-top:10px">요청 ' + fmtSec(V.dur) + ' → 실제 <b>' + snapped.toFixed(1) + '초</b> = 주기 ' + P.toFixed(1) + '초 × <b>' + reps + '회</b>' +
+        (Math.abs(snapped - V.dur) > 0.05 ? ' <span class="dim">(정수배로 스냅됨)</span>' : '') + '</div>' +
+    '</div>' +
+    '<fieldset' + lock + '><div class="fields">' +
+      '<div class="card"><h3>패턴</h3><div class="pats">' + Object.keys(PATTERNS).map(function (k) {
+        return '<button class="pat' + (V.pattern === k ? ' on' : '') + '" data-pat="' + k + '">' + PATTERNS[k].name + '<small>' + PATTERNS[k].desc + '</small></button>';
+      }).join('') + '</div>' +
+      (V.pattern === 'breath' ? '<div style="margin-top:12px"><label class="f">호흡 주기 <b>' + V.breathSec + '초</b> (들숨+날숨)</label><input type="range" id="sBreath" min="3" max="12" step="0.5" value="' + V.breathSec + '"></div>' : '') +
+      '</div>' +
+      '<div class="card"><h3>색상 팔레트</h3><div class="pals" style="margin-bottom:20px">' + Object.keys(PALETTES).map(function (k) {
+        var p = PALETTES[k];
+        return '<div class="pal' + (V.palette === k ? ' on' : '') + '" data-pal="' + k + '" style="background:linear-gradient(135deg,' + rgba(p.c[0], 1) + ',' + rgba(p.c[1], 1) + ')"><span>' + p.name + '</span></div>';
+      }).join('') + '</div>' +
+        '<div class="fields">' +
+          sl('sSpeed', '속도', V.speed.toFixed(2) + '×', 0.25, 3, 0.05, V.speed) +
+          sl('sDensity', '밀도', Math.round(V.density * 100) + '%', 0, 1, 0.01, V.density) +
+          sl('sGlow', '글로우', Math.round(V.glow * 100) + '%', 0, 1, 0.01, V.glow) +
+          sl('sBg', '배경 밝기', V.bgLevel < 0.05 ? '순수 검정' : Math.round(V.bgLevel * 100) + '%', 0, 1, 0.01, V.bgLevel) +
+        '</div></div>' +
+      '<div class="card"><h3>출력</h3><div class="fields">' +
+        '<div><label class="f">해상도</label><select id="sRes">' + Object.keys(RESOLUTIONS).map(function (k) { var rr = RESOLUTIONS[k]; return '<option value="' + k + '"' + (V.res === k ? ' selected' : '') + '>' + k + (rr[0] < rr[1] ? ' (세로)' : rr[0] > 2000 ? ' (4K)' : ' (FHD)') + '</option>'; }).join('') + '</select></div>' +
+        '<div class="g2"><div><label class="f">프레임</label><select id="sFps"><option value="30"' + (V.fps === 30 ? ' selected' : '') + '>30 fps</option><option value="60"' + (V.fps === 60 ? ' selected' : '') + '>60 fps</option></select></div>' +
+        '<div><label class="f">비트레이트</label><select id="sMbps">' + [8, 12, 16, 24, 32].map(function (m) { return '<option value="' + m + '"' + (V.mbps === m ? ' selected' : '') + '>' + m + ' Mbps</option>'; }).join('') + '</select></div></div>' +
+        '<div><label class="f">녹화 길이</label><select id="sDur">' + DURATIONS.map(function (d) { return '<option value="' + d + '"' + (V.dur === d ? ' selected' : '') + '>' + fmtSec(d) + '</option>'; }).join('') + '</select></div>' +
+        (V.res === '3840x2160' && V.fps === 60 ? '<div class="tip warn" style="margin:0">4K·60fps 는 컴퓨터 성능에 따라 프레임이 떨어질 수 있습니다. 4K 는 30fps 를 권합니다.</div>' : '') +
+      '</div></div>' +
+    '</div></fieldset>' +
+  '</div>';
+  $('#pv').insertBefore(cv, $('#pv').firstChild);
+  on('[data-pat]', 'click', function (e) { V.pattern = e.currentTarget.getAttribute('data-pat'); cache.key = ''; render(); }, v);
+  on('[data-pal]', 'click', function (e) { V.palette = e.currentTarget.getAttribute('data-pal'); render(); }, v);
+  bindSlider('sSpeed', function (x) { V.speed = x; }, v); bindSlider('sDensity', function (x) { V.density = x; cache.key = ''; }, v);
+  bindSlider('sGlow', function (x) { V.glow = x; }, v); bindSlider('sBg', function (x) { V.bgLevel = x; }, v);
+  bindSlider('sBreath', function (x) { V.breathSec = x; }, v);
+  on('#sRes', 'change', function (e) { V.res = e.currentTarget.value; applyResolution(); render(); }, v);
+  on('#sFps', 'change', function (e) { V.fps = +e.currentTarget.value; render(); }, v);
+  on('#sMbps', 'change', function (e) { V.mbps = +e.currentTarget.value; render(); }, v);
+  on('#sDur', 'change', function (e) { V.dur = +e.currentTarget.value; render(); }, v);
+  on('#recStart', 'click', function () { startRecording(); }, v);
+  on('#recAbort', 'click', function () { stopRecording(true); }, v);
+  on('#pngBtn', 'click', exportPng, v);
+}
+function sl(id, label, val, min, max, step, cur) {
+  return '<div><label class="f">' + label + ' <b>' + val + '</b></label><input type="range" id="' + id + '" min="' + min + '" max="' + max + '" step="' + step + '" value="' + cur + '"></div>';
+}
+function bindSlider(id, set, root) {
+  var el = $('#' + id, root); if (!el) return;
+  el.addEventListener('input', function (e) { set(+e.target.value); var lab = el.previousElementSibling && el.previousElementSibling.querySelector('b'); if (lab) lab.textContent = liveLabel(id); });
+  el.addEventListener('change', function () { render(); });
+}
+function liveLabel(id) {
+  if (id === 'sSpeed') return V.speed.toFixed(2) + '×';
+  if (id === 'sDensity') return Math.round(V.density * 100) + '%';
+  if (id === 'sGlow') return Math.round(V.glow * 100) + '%';
+  if (id === 'sBg') return V.bgLevel < 0.05 ? '순수 검정' : Math.round(V.bgLevel * 100) + '%';
+  if (id === 'sBreath') return V.breathSec + '초';
+  return '';
+}
+
+/* ==========================================================================
+   5. 음원 — 상태 · 정수 사이클 스냅 · 노이즈 · 그래프
+   ========================================================================== */
+var SR = 44100, CHUNK_TARGET_SEC = 300;   /* 5분 단위로 나눠 렌더링 (메모리) */
+var DUR_MIN = [1, 3, 5, 10, 15, 20, 30, 45, 60];
+var SOLFEGGIO = [174, 285, 396, 417, 432, 528, 639, 741, 852, 963];
+var A = { items: [], nextId: 1, playing: null, rendering: null };
+
+function newItem(hz) {
+  return { id: A.nextId++, hz: hz, mode: 'pure', carrier: 200, beat: 4, noise: 'pink', mix: 0.3,
+           minutes: 10, db: -12, fadeIn: 3, fadeOut: 3, progress: 0, status: '' };
+}
+function itemById(id) { for (var i = 0; i < A.items.length; i++) if (A.items[i].id === id) return A.items[i]; return null; }
+function freqsOf(it) { return it.mode === 'binaural' ? [it.carrier, it.carrier + it.beat] : [it.hz]; }
+function fmtHz(f) { return String(+(+f).toFixed(3)).replace('.', 'p'); }
+function fileName(it, sec) {
+  var len = (sec % 60 === 0 && sec >= 60) ? (sec / 60) + 'min' : Math.round(sec) + 's';
+  if (it.mode === 'pure') return 'tone_' + fmtHz(it.hz) + 'Hz_' + len + '.wav';
+  if (it.mode === 'binaural') return 'binaural_' + fmtHz(it.carrier) + 'Hz_' + fmtHz(it.beat) + 'Hz_' + len + '.wav';
+  return 'mix_' + fmtHz(it.hz) + 'Hz_' + it.noise + Math.round(it.mix * 100) + '_' + len + '.wav';
+}
+function wavBytes(sec) { return 44 + Math.round(sec * SR) * 4; }
+
+/**
+ * 목표 길이에 가장 가까운 샘플 수 N 을, 모든 주파수 f 에 대해 f·N/sr 이 정수가 되게 고릅니다.
+ * → 사인파가 정확히 0 에서 시작해 0 에서 끝나고, 분할 렌더링 경계에서도 위상이 0 으로 맞습니다.
+ * 정수 Hz + 정수 초면 첫 후보에서 바로 끝납니다. 아니면 ±1초 안에서 오차 최소 N 을 찾습니다.
+ */
+function snapSamples(freqs, targetSec, sr) {
+  var N0 = Math.max(1, Math.round(targetSec * sr)), best = N0, bestErr = Infinity;
+  for (var d = 0; d <= sr; d++) {
+    for (var s = (d === 0 ? 1 : -1); s <= 1; s += 2) {
+      var N = N0 + s * d; if (N <= 0) continue;
+      var err = 0;
+      for (var i = 0; i < freqs.length; i++) { var c = freqs[i] * N / sr; var fr = Math.abs(c - Math.round(c)); if (fr > err) err = fr; }
+      if (err < bestErr) { bestErr = err; best = N; if (err < 1e-9) return best; }
+      if (d === 0) break;
+    }
+  }
+  return best;
+}
+
+/** 상태를 가진 노이즈 생성기 — 청크가 바뀌어도 이어서 생성 (레벨 점프 없음) */
+function makeNoise(type, seed) {
+  var r = rng(seed), b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, brown = 0;
+  return function (arr) {
+    for (var i = 0; i < arr.length; i++) {
+      var w = r() * 2 - 1;
+      if (type === 'brown') { brown = (brown + 0.02 * w) / 1.02; arr[i] = clamp(brown * 3.5, -1, 1); }
+      else {  /* 핑크 (Paul Kellet 근사) */
+        b0 = 0.99886 * b0 + w * 0.0555179; b1 = 0.99332 * b1 + w * 0.0750759; b2 = 0.96900 * b2 + w * 0.1538520;
+        b3 = 0.86650 * b3 + w * 0.3104856; b4 = 0.55000 * b4 + w * 0.5329522; b5 = -0.7616 * b5 - w * 0.0168980;
+        var p = b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362; b6 = w * 0.115926;
+        arr[i] = clamp(p * 0.11, -1, 1);
+      }
+    }
+  };
+}
+
+/** 미리듣기(실시간)와 렌더링(오프라인)이 같은 그래프를 씁니다. T=Infinity 면 실시간 무한 재생. */
+function buildGraph(ctx, it, T, opts) {
+  var master = ctx.createGain(); master.connect(ctx.destination);
+  var gT = Math.pow(10, it.db / 20);
+  var fi = isFinite(T) ? Math.min(it.fadeIn, T / 2) : it.fadeIn, fo = isFinite(T) ? Math.min(it.fadeOut, T / 2) : 0;
+  var gp = master.gain;
+  gp.setValueAtTime(opts.isFirst && fi > 0 ? 0 : gT, 0);
+  if (opts.isFirst && fi > 0) gp.linearRampToValueAtTime(gT, fi);
+  if (opts.isLast && fo > 0 && isFinite(T)) { gp.setValueAtTime(gT, T - fo); gp.linearRampToValueAtTime(0, T); }
+
+  var nodes = [];
+  if (it.mode === 'binaural') {
+    var merger = ctx.createChannelMerger(2);
+    var oL = ctx.createOscillator(), oR = ctx.createOscillator();
+    oL.type = 'sine'; oR.type = 'sine'; oL.frequency.value = it.carrier; oR.frequency.value = it.carrier + it.beat;
+    oL.connect(merger, 0, 0); oR.connect(merger, 0, 1); merger.connect(master);
+    oL.start(0); oR.start(0); if (isFinite(T)) { oL.stop(T); oR.stop(T); }
+    nodes.push(oL, oR);
+  } else {
+    var osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = it.hz;
+    var tg = ctx.createGain(); tg.gain.value = it.mode === 'mix' ? (1 - it.mix) : 1;
+    osc.connect(tg); tg.connect(master); osc.start(0); if (isFinite(T)) osc.stop(T);
+    nodes.push(osc);
+    if (it.mode === 'mix') {
+      var len = isFinite(T) ? Math.ceil(T * ctx.sampleRate) : ctx.sampleRate * 8;
+      var buf = ctx.createBuffer(2, len, ctx.sampleRate), tmp = new Float32Array(len);
+      opts.noiseFill(tmp); buf.copyToChannel(tmp, 0); buf.copyToChannel(tmp, 1);
+      var src = ctx.createBufferSource(); src.buffer = buf; src.loop = !isFinite(T);
+      var ng = ctx.createGain(); ng.gain.value = it.mix * 0.9;     /* 톤(1-r) + 노이즈(0.9r) ≤ 1 → 클리핑 없음 */
+      src.connect(ng); ng.connect(master); src.start(0);
+      nodes.push(src);
+    }
+  }
+  return { master: master, stop: function () { nodes.forEach(function (n) { try { n.stop(); } catch (e) { /* noop */ } }); } };
+}
+
+/* ---------- 미리듣기 ---------- */
+function preview(it) {
+  stopPreview(true);
+  var AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) { toast('이 브라우저는 Web Audio 를 지원하지 않습니다', 'err'); return; }
+  var ctx = new AC();
+  var graph = buildGraph(ctx, it, Infinity, { isFirst: true, isLast: false, noiseFill: makeNoise(it.noise, it.id * 7919 + 1) });
+  A.playing = { id: it.id, ctx: ctx, graph: graph };
+  render();
+}
+function stopPreview(silent) {
+  if (!A.playing) return;
+  var p = A.playing; A.playing = null;
+  try { p.graph.master.gain.setTargetAtTime(0, p.ctx.currentTime, 0.03); } catch (e) { /* noop */ }
+  setTimeout(function () { try { p.graph.stop(); } catch (e) {} try { p.ctx.close(); } catch (e) {} }, 160);
+  if (!silent) render();
+}
+
+/* ---------- 오프라인 렌더링 (분할) + WAV 인코딩 ---------- */
+function interleave16(buf) {
+  var L = buf.getChannelData(0), R = buf.numberOfChannels > 1 ? buf.getChannelData(1) : L, n = buf.length;
+  var out = new Int16Array(n * 2);
+  for (var i = 0; i < n; i++) {
+    var l = clamp(L[i], -1, 1), r = clamp(R[i], -1, 1);
+    out[2 * i] = l < 0 ? l * 32768 : l * 32767;
+    out[2 * i + 1] = r < 0 ? r * 32768 : r * 32767;
+  }
+  return out;
+}
+function encodeWavParts(parts, ch, sr) {
+  var dataBytes = 0; parts.forEach(function (p) { dataBytes += p.byteLength; });
+  var h = new ArrayBuffer(44), d = new DataView(h);
+  var str = function (o, s) { for (var i = 0; i < s.length; i++) d.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, 'RIFF'); d.setUint32(4, 36 + dataBytes, true); str(8, 'WAVE');
+  str(12, 'fmt '); d.setUint32(16, 16, true); d.setUint16(20, 1, true); d.setUint16(22, ch, true);
+  d.setUint32(24, sr, true); d.setUint32(28, sr * ch * 2, true); d.setUint16(32, ch * 2, true); d.setUint16(34, 16, true);
+  str(36, 'data'); d.setUint32(40, dataBytes, true);
+  return new Blob([h].concat(parts), { type: 'audio/wav' });
+}
+function renderWav(it, onProgress) {
+  var freqs = freqsOf(it), target = it.minutes * 60;
+  var nChunks = Math.max(1, Math.ceil(target / CHUNK_TARGET_SEC));
+  var chunkN = snapSamples(freqs, target / nChunks, SR);
+  var totalN = chunkN * nChunks;
+  var noiseFill = makeNoise(it.noise, it.id * 7919 + 1);
+  var parts = [];
+  function step(i) {
+    if (i >= nChunks) return Promise.resolve({ blob: encodeWavParts(parts, 2, SR), seconds: totalN / SR, chunks: nChunks,
+                                                 cycles: freqs.map(function (f) { return f * totalN / SR; }) });
+    var ctx;
+    try { ctx = new OfflineAudioContext(2, chunkN, SR); }
+    catch (e) { return Promise.reject(new Error('OfflineAudioContext 생성 실패: ' + e.message)); }
+    buildGraph(ctx, it, chunkN / SR, { isFirst: i === 0, isLast: i === nChunks - 1, noiseFill: noiseFill });
+    return ctx.startRendering().then(function (buf) {
+      parts.push(interleave16(buf));
+      if (onProgress) onProgress((i + 1) / nChunks, i + 1, nChunks);
+      return new Promise(function (r) { setTimeout(r, 0); }).then(function () { return step(i + 1); });
+    });
+  }
+  return step(0);
+}
+function generate(it) {
+  if (A.rendering) { toast('다른 음원을 생성 중입니다. 끝난 뒤 다시 시도하세요'); return; }
+  if (A.playing && A.playing.id === it.id) stopPreview(true);
+  A.rendering = it.id; it.progress = 0; it.status = '준비 중…'; render();
+  var t0 = performance.now();
+  renderWav(it, function (p, i, n) {
+    it.progress = p; it.status = '렌더링 ' + i + '/' + n + ' 구간 (' + Math.round(p * 100) + '%)';
+    var bar = $('#prog-' + it.id), lab = $('#stat-' + it.id);
+    if (bar) bar.style.width = Math.round(p * 100) + '%'; if (lab) lab.textContent = it.status;
+  }).then(function (res) {
+    var name = fileName(it, Math.round(res.seconds));
+    download(name, res.blob);
+    it.status = '완료 · ' + name + ' · ' + fmtBytes(res.blob.size) + ' · ' + ((performance.now() - t0) / 1000).toFixed(1) + '초 소요';
+    toast('WAV 저장: ' + name, 'ok');
+  }).catch(function (e) {
+    it.status = '실패: ' + (e && e.message);
+    alert('음원 생성에 실패했습니다.\n\n' + (e && e.message) + '\n\n긴 파일은 브라우저 메모리를 많이 씁니다. ' +
+          '길이를 절반으로 나눠(예: 60분 → 30분 × 2) 각각 생성한 뒤 편집기에서 이어붙이세요. ' +
+          '같은 주파수·같은 설정이면 파일 시작·끝이 위상 0 이라 이음새가 들리지 않습니다.');
+  }).then(function () { A.rendering = null; render(); });
+}
+
+/* ==========================================================================
+   6. 음원 UI
+   ========================================================================== */
+function viewAud(v) {
+  var head = '<div class="tip">🎧 <b>사용법</b> — ① Hz 를 입력해 추가 ② 항목마다 모드(퓨어 톤 / 바이노럴 / 톤+노이즈)·길이·볼륨·페이드를 설정 ' +
+    '③ <b>미리듣기</b>로 확인 ④ <b>WAV 생성</b>. 44.1kHz · 16bit · 스테레오로 저장되고, 사인파는 <b>위상 0 에서 시작해 정확히 정수 사이클로 끝나</b> 파일을 이어붙여도 클릭이 없습니다.</div>' +
+    '<div class="card" style="margin-bottom:14px"><h3>주파수 추가</h3><div class="row" style="margin-bottom:10px">' +
+      '<input class="input" id="hzIn" type="number" min="1" max="20000" step="0.1" style="width:160px" placeholder="예: 432">' +
+      '<button class="btn primary" id="hzAdd">＋ 추가</button>' +
+      '<span class="dim" style="font-size:12px">자주 쓰는 값:</span></div>' +
+      '<div class="chips">' + SOLFEGGIO.map(function (f) { return '<button class="hzchip" data-hz="' + f + '">' + f + ' Hz</button>'; }).join('') + '</div></div>';
+
+  var list;
+  if (!A.items.length) {
+    list = '<div class="empty"><div class="ico">🎧</div><h4>추가된 주파수가 없습니다</h4><p>위에서 Hz 를 넣거나 자주 쓰는 값을 눌러 추가하세요. 항목마다 따로 설정하고 따로 내려받습니다.</p>' +
+      '<ol><li><b>퓨어 톤</b> — 단일 사인파. 가장 기본.</li><li><b>바이노럴 비트</b> — 왼쪽 200Hz / 오른쪽 204Hz 처럼 좌우 차이(비트)로 리듬을 만듭니다. 이어폰 필수.</li>' +
+      '<li><b>톤 + 노이즈</b> — 사인파에 브라운/핑크 노이즈를 섞어 배경처럼 깔 때.</li></ol></div>';
+  } else {
+    list = A.items.map(function (it) {
+      var freqs = freqsOf(it), target = it.minutes * 60;
+      var nChunks = Math.max(1, Math.ceil(target / CHUNK_TARGET_SEC));
+      var sec = snapSamples(freqs, target / nChunks, SR) * nChunks / SR;
+      var busy = A.rendering === it.id, playing = A.playing && A.playing.id === it.id;
+      var lock = (busy || A.rendering) ? ' disabled' : '';
+      var modeName = { pure: '퓨어 톤', binaural: '바이노럴 비트', mix: '톤 + 노이즈' }[it.mode];
+      return '<div class="freq-item" id="item-' + it.id + '">' +
+        '<div class="freq-head"><div class="row" style="gap:10px">' +
+          (it.mode === 'binaural'
+            ? '<span class="freq-hz">' + esc(+it.carrier) + '<small>Hz</small> <span class="dim" style="font-size:14px">L</span> · ' + esc(+(it.carrier + it.beat).toFixed(3)) + '<small>Hz</small> <span class="dim" style="font-size:14px">R</span></span>'
+            : '<span class="freq-hz">' + esc(+it.hz) + '<small>Hz</small></span>') +
+          '<span class="badge b-accent">' + modeName + '</span>' +
+          (playing ? '<span class="badge b-gray">▶ 재생 중</span>' : '') +
+        '</div><div class="row" style="gap:6px">' +
+          (playing ? '<button class="btn sm" data-stop="' + it.id + '">■ 정지</button>' : '<button class="btn sm" data-play="' + it.id + '"' + (A.rendering ? ' disabled' : '') + '>▶ 미리듣기</button>') +
+          '<button class="btn sm primary" data-gen="' + it.id + '"' + lock + '>' + (busy ? '<span class="dim">생성 중…</span>' : '⬇ WAV 생성') + '</button>' +
+          '<button class="btn sm danger" data-del="' + it.id + '"' + lock + '>🗑</button>' +
+        '</div></div>' +
+        '<fieldset' + lock + '><div class="fields">' +
+          '<div class="g3">' +
+            '<div><label class="f">모드</label><select data-f="mode" data-id="' + it.id + '">' +
+              [['pure', '퓨어 톤 (단일 사인파)'], ['binaural', '바이노럴 비트 (좌우 다른 Hz)'], ['mix', '톤 + 노이즈 믹스']].map(function (o) { return '<option value="' + o[0] + '"' + (it.mode === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
+            (it.mode === 'binaural'
+              ? '<div><label class="f">캐리어 (Hz)</label><input class="input" type="number" step="0.1" min="20" max="1500" data-f="carrier" data-id="' + it.id + '" value="' + it.carrier + '"></div>' +
+                '<div><label class="f">비트 (Hz) <span class="dim">델타 1–4 · 세타 4–8 · 알파 8–13</span></label><input class="input" type="number" step="0.1" min="0.1" max="40" data-f="beat" data-id="' + it.id + '" value="' + it.beat + '"></div>'
+              : '<div><label class="f">주파수 (Hz)</label><input class="input" type="number" step="0.1" min="1" max="20000" data-f="hz" data-id="' + it.id + '" value="' + it.hz + '"></div>' +
+                (it.mode === 'mix'
+                  ? '<div><label class="f">노이즈</label><select data-f="noise" data-id="' + it.id + '"><option value="pink"' + (it.noise === 'pink' ? ' selected' : '') + '>핑크 (부드러움)</option><option value="brown"' + (it.noise === 'brown' ? ' selected' : '') + '>브라운 (더 낮고 묵직)</option></select></div>'
+                  : '<div></div>')) +
+          '</div>' +
+          (it.mode === 'mix' ? '<div><label class="f">노이즈 비율 <b>' + Math.round(it.mix * 100) + '%</b> <span class="dim">(톤 ' + Math.round((1 - it.mix) * 100) + '%)</span></label><input type="range" min="0" max="1" step="0.01" data-f="mix" data-id="' + it.id + '" value="' + it.mix + '"></div>' : '') +
+          '<div class="g3">' +
+            '<div><label class="f">길이</label><select data-f="minutes" data-id="' + it.id + '">' + DUR_MIN.map(function (m) { return '<option value="' + m + '"' + (it.minutes === m ? ' selected' : '') + '>' + m + '분</option>'; }).join('') + '</select></div>' +
+            '<div><label class="f">볼륨 <b>' + it.db + ' dBFS</b></label><input type="range" min="-40" max="0" step="1" data-f="db" data-id="' + it.id + '" value="' + it.db + '"></div>' +
+            '<div class="g2"><div><label class="f">페이드인 (초)</label><input class="input" type="number" min="0" max="60" step="0.5" data-f="fadeIn" data-id="' + it.id + '" value="' + it.fadeIn + '"></div>' +
+              '<div><label class="f">페이드아웃 (초)</label><input class="input" type="number" min="0" max="60" step="0.5" data-f="fadeOut" data-id="' + it.id + '" value="' + it.fadeOut + '"></div></div>' +
+          '</div>' +
+        '</div></fieldset>' +
+        '<div class="divider"></div>' +
+        '<div class="stat">파일명 <b>' + esc(fileName(it, Math.round(sec))) + '</b> · 실제 길이 <b>' + sec.toFixed(3) + '초</b>' +
+          ' (' + freqs.map(function (f) { return Math.round(f * sec).toLocaleString('ko-KR') + '사이클'; }).join(' / ') + ') · 예상 크기 <b>' + fmtBytes(wavBytes(sec)) + '</b>' +
+          (nChunks > 1 ? ' · ' + nChunks + '구간으로 나눠 렌더링' : '') + '</div>' +
+        (it.minutes >= 30 ? '<div class="tip warn" style="margin:10px 0 0">⚠️ 30분 이상은 브라우저 메모리를 수백 MB 씁니다. 실패하면 길이를 나눠 생성하세요 — 같은 설정이면 파일 경계에서 위상이 0 이라 이어붙여도 클릭이 없습니다.</div>' : '') +
+        (busy || it.status ? '<div style="margin-top:10px"><div class="prog"><i id="prog-' + it.id + '" style="width:' + Math.round(it.progress * 100) + '%"></i></div><div class="dim" id="stat-' + it.id + '" style="font-size:12px;margin-top:5px">' + esc(it.status) + '</div></div>' : '') +
+      '</div>';
+    }).join('');
+  }
+  v.innerHTML = head + '<div class="aud">' + list + '</div>';
+
+  function add(hz) {
+    hz = +hz; if (!(hz > 0) || hz > 20000) { toast('1~20000 사이의 Hz 를 입력하세요', 'err'); return; }
+    A.items.push(newItem(hz)); render(); toast(hz + ' Hz 추가', 'ok');
+  }
+  on('#hzAdd', 'click', function () { add($('#hzIn', v).value); }, v);
+  on('#hzIn', 'keydown', function (e) { if (e.key === 'Enter') add(e.target.value); }, v);
+  on('[data-hz]', 'click', function (e) { add(e.currentTarget.getAttribute('data-hz')); }, v);
+  on('[data-play]', 'click', function (e) { var it = itemById(+e.currentTarget.getAttribute('data-play')); if (it) preview(it); }, v);
+  on('[data-stop]', 'click', function () { stopPreview(); }, v);
+  on('[data-gen]', 'click', function (e) { var it = itemById(+e.currentTarget.getAttribute('data-gen')); if (it) generate(it); }, v);
+  on('[data-del]', 'click', function (e) {
+    var id = +e.currentTarget.getAttribute('data-del');
+    if (A.playing && A.playing.id === id) stopPreview(true);
+    A.items = A.items.filter(function (x) { return x.id !== id; }); render();
+  }, v);
+  on('[data-f]', 'change', function (e) {
+    var el = e.currentTarget, it = itemById(+el.getAttribute('data-id')); if (!it) return;
+    var f = el.getAttribute('data-f'), val = el.value;
+    if (f === 'mode' || f === 'noise') it[f] = val; else it[f] = +val;
+    if (f === 'hz') it.hz = clamp(it.hz || 1, 1, 20000);
+    if (f === 'carrier') it.carrier = clamp(it.carrier || 200, 20, 1500);
+    if (f === 'beat') it.beat = clamp(it.beat || 4, 0.1, 40);
+    if (f === 'fadeIn' || f === 'fadeOut') it[f] = clamp(it[f] || 0, 0, 60);
+    it.status = '';
+    if (A.playing && A.playing.id === it.id) preview(it); else render();
+  }, v);
+  on('input[type=range][data-f]', 'input', function (e) {
+    var el = e.currentTarget, it = itemById(+el.getAttribute('data-id')); if (!it) return;
+    it[el.getAttribute('data-f')] = +el.value;
+    var lab = el.previousElementSibling && el.previousElementSibling.querySelector('b');
+    if (lab) lab.textContent = el.getAttribute('data-f') === 'db' ? it.db + ' dBFS' : Math.round(it.mix * 100) + '%';
+    if (A.playing && A.playing.id === it.id) { try { A.playing.graph.master.gain.setTargetAtTime(Math.pow(10, it.db / 20), A.playing.ctx.currentTime, 0.02); } catch (x) {} }
+  }, v);
+}
+
+/* ==========================================================================
+   7. 셸 · 시작
+   ========================================================================== */
+function render() {
+  $$('.tab').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === UI.tab); b.disabled = V.recording && b.getAttribute('data-tab') !== UI.tab; });
+  var v = $('#view');
+  if (UI.tab === 'vis') viewVis(v); else viewAud(v);
+  onVisibility(document.hidden);
+}
+document.addEventListener('DOMContentLoaded', function () {
+  applyResolution();
+  on('.tab', 'click', function (e) { if (V.recording) { toast('녹화 중에는 탭을 바꿀 수 없습니다'); return; } UI.tab = e.currentTarget.getAttribute('data-tab'); render(); });
+  window.addEventListener('beforeunload', function (e) { if (V.recording || A.rendering) { e.preventDefault(); e.returnValue = ''; } });
+  render();
+  rafId = requestAnimationFrame(loop);
+});
+
+/* 테스트용 훅 */
+window.__SG__ = {
+  V: V, A: A, UI: UI, render: render, renderAt: renderAt, period: period, snapDuration: snapDuration,
+  snapSamples: snapSamples, makeNoise: makeNoise, renderWav: renderWav, encodeWavParts: encodeWavParts,
+  interleave16: interleave16, buildGraph: buildGraph, fileName: fileName, freqsOf: freqsOf, newItem: newItem,
+  startRecording: startRecording, stopRecording: stopRecording, onVisibility: onVisibility, exportPng: exportPng,
+  cv: function () { return cv; }, PATTERNS: PATTERNS, PALETTES: PALETTES, SR: SR, CHUNK: CHUNK_TARGET_SEC
+};
+</script>
+</body>
+</html>
