@@ -11,4 +11,7 @@
 | [`feed-sorter/`](./feed-sorter/) | 🔢 Feed Sorter (개인용) | TikTok·Instagram 피드를 조회수·좋아요·댓글·날짜순으로 재정렬하고 썸네일에 스탯을 표시하는 크롬 확장 | `chrome://extensions` → 개발자 모드 → 압축해제된 확장 프로그램 로드 |
 | [`competitor-tracker/`](./competitor-tracker/) | 📈 경쟁 채널 트래커 | 경쟁 쇼츠 채널의 조회수 스냅샷을 쌓아 급상승 영상·제목 패턴·업로드 시간대를 분석 | `tracker.html` 더블클릭 (YouTube API 키 필요) |
 
-자세한 사용법은 각 폴더의 `README.md` 를 읽어주세요.
+## 📖 사용 가이드
+
+- **[GUIDE.md](./GUIDE.md)** — 세 도구를 한 문서로 정리한 **초보자용 통합 가이드**. 추천 작업 흐름(트래커 → Feed Sorter → 소스 매니저)과 각 도구의 화면별 설명·FAQ가 들어 있습니다. 순수 마크다운이라 **노션에 그대로 붙여넣을 수 있습니다.**
+- 각 폴더의 `README.md` — 해당 도구의 상세 설명과 **유지보수 지침**(사이트 구조가 바뀌었을 때 고칠 상수 위치).
