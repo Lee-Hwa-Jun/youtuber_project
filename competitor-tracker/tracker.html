@@ -225,6 +225,20 @@ table.rank tr:hover td{background:var(--panel2)}
 .foot-note{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
            color:var(--dim);font-size:11.5px;text-align:center}
 
+/* ---------- 내 채널 ---------- */
+.drop{border:2px dashed var(--line2);border-radius:12px;padding:22px 16px;text-align:center;color:var(--muted);
+      cursor:pointer;transition:.15s;background:var(--panel2);font-size:13px}
+.drop:hover,.drop.over{border-color:var(--accent);background:rgba(57,135,229,.1);color:var(--text)}
+.b-short{background:rgba(163,113,247,.16);color:#c3a8ff;border-color:rgba(163,113,247,.45)}
+.b-long{background:rgba(57,135,229,.16);color:var(--accent);border-color:rgba(57,135,229,.42)}
+.prompt{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-size:12.5px;
+        line-height:1.6;white-space:pre-wrap;word-break:keep-all;color:var(--text)}
+.ratio{display:flex;height:10px;border-radius:20px;overflow:hidden;background:var(--panel3)}
+.ratio>i{display:block;height:100%}
+.ratio .rs{background:#a371f7}.ratio .rl{background:var(--accent)}
+table.rank td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+table.rank th.num{text-align:right}
+
 /* ---------- 반응형 ---------- */
 @media(max-width:980px){ .grid3{grid-template-columns:1fr 1fr} }
 @media(max-width:720px){
@@ -312,6 +326,34 @@ var RULES = {
   TOP_N: 20,
   TOP_PERCENT: 0.2
 };
+
+/* 내 채널 수집 규칙 */
+var MY = {
+  INITIAL_PAGES: 4,     /* 등록 시 최신 200개(50×4)까지 */
+  MORE_PAGES: 1,        /* 더보기 1회 = 50개 */
+  TOP_PERCENT: 0.2,     /* 인사이트: 조회수 상위 20% */
+  MAX_TITLE_WORDS: 8
+};
+/* 유튜브 스튜디오 CSV 컬럼 별칭(한/영). 헤더는 소문자로 바꾸고 공백·괄호·%·콜론을 지운 뒤 "정확히" 비교합니다. */
+var STUDIO_COLS = {
+  videoId:     { label: '영상ID',            keys: ['콘텐츠', 'content', 'videoid', '동영상id', '영상id'] },
+  title:       { label: '제목',              keys: ['동영상제목', 'videotitle', '제목', 'title'] },
+  published:   { label: '게시시간',          keys: ['동영상게시시간', 'videopublishtime', '게시시간', 'publishtime'] },
+  impressions: { label: '노출수',            keys: ['노출수', 'impressions'] },
+  ctr:         { label: '노출클릭률(%)',     keys: ['노출클릭률', 'impressionsclickthroughrate', 'ctr'] },
+  avgDuration: { label: '평균시청지속시간',  keys: ['평균시청지속시간', 'averageviewduration'] },
+  avgPct:      { label: '평균조회율(%)',     keys: ['평균조회율', 'averagepercentageviewed'] },
+  subs:        { label: '구독자증감',        keys: ['구독자', 'subscribers', '구독자증감', '순구독자'] },
+  views:       { label: '조회수(스튜디오)',  keys: ['조회수', 'views'] },
+  watchHours:  { label: '시청시간(시간)',    keys: ['시청시간단위시간', 'watchtimehours', '시청시간'] }
+};
+var STUDIO_METRIC_KEYS = ['impressions', 'ctr', 'avgDuration', 'avgPct', 'subs', 'views', 'watchHours'];
+/* 클로드에게 물어볼 추천 질문 */
+var AI_PROMPTS = [
+  '첨부한 CSV는 내 유튜브 채널의 영상별 데이터입니다. 조회수 상위 20%와 하위 20% 영상을 나눠서 제목(길이·단어·이모지), 영상 길이, 게시 요일·시간대의 패턴 차이를 분석해 주세요. 그리고 그 패턴을 바탕으로 다음에 올릴 영상 5개의 제목과 업로드 요일·시간을 제안해 주세요.',
+  '첨부한 CSV에서 시간당조회수와 첫스냅샷대비증가율이 높은 영상, 즉 "지금 크고 있는" 영상들의 공통점을 찾아 주세요. 좋아요비율·댓글비율이 높은 영상과 낮은 영상도 비교해서, 시청자 반응을 끌어내는 요소가 무엇인지 정리해 주세요.',
+  '첨부한 CSV의 쇼츠와 롱폼을 따로 분석해 주세요. 각 유형에서 잘 되는 제목 형식과 길이를 뽑고, (노출클릭률·평균조회율 컬럼이 있다면) 노출은 많은데 클릭이 적은 영상과 클릭은 되는데 끝까지 안 보는 영상을 구분해 개선 방향을 제안해 주세요.'
+];
 
 var LS_KEY = 'cct_v1';
 
@@ -450,6 +492,30 @@ var ui = { tab: 'dash', recentOnly: false, chFilter: '', sort: 'vph',
            titleBasis: 'vph', titleWord: '', kwSeed: '', kwResults: [], kwRunning: false, kwFallback: false,
            busy: false };
 
+function defaultMy() {
+  return { channel: null, videos: [], nextPageToken: '',
+           studio: { headers: [], byVideoId: {}, unmatched: [], importedAt: 0, metrics: [] } };
+}
+function normMy(m) {
+  var d = defaultMy();
+  if (!m || typeof m !== 'object') return d;
+  var out = { channel: (m.channel && m.channel.id) ? m.channel : null,
+              videos: Array.isArray(m.videos) ? m.videos : [],
+              nextPageToken: typeof m.nextPageToken === 'string' ? m.nextPageToken : '',
+              studio: Object.assign({}, d.studio, m.studio || {}) };
+  if (!out.studio.byVideoId || typeof out.studio.byVideoId !== 'object') out.studio.byVideoId = {};
+  if (!Array.isArray(out.studio.unmatched)) out.studio.unmatched = [];
+  if (!Array.isArray(out.studio.headers)) out.studio.headers = [];
+  if (!Array.isArray(out.studio.metrics)) out.studio.metrics = [];
+  if (out.channel) out.channel.subsHistory = Array.isArray(out.channel.subsHistory) ? out.channel.subsHistory : [];
+  out.videos.forEach(function (v) {
+    v.durationSec = num(v.durationSec); v.title = v.title || ''; v.publishedAt = v.publishedAt || ''; v.thumb = v.thumb || '';
+    v.type = v.type === 'shorts' || v.type === 'long' ? v.type : videoType(v.durationSec);
+  });
+  return out;
+}
+function videoType(sec) { return sec > 0 && sec <= RULES.SHORTS_MAX_SEC ? 'shorts' : 'long'; }
+
 function defaultState() {
   return {
     v: 1,
@@ -460,7 +526,9 @@ function defaultState() {
     videos: [],
     /* 스냅샷은 videoId 로 묶어 둡니다(조회 O(1)).
        내보내기/가져오기는 평탄한 배열 형태도 함께 지원합니다. */
-    snapshots: {}
+    snapshots: {},
+    /* 내 채널은 경쟁 채널과 분리 보관. 스냅샷 맵은 공유(영상 ID 가 겹칠 일 없음) */
+    myChannel: defaultMy()
   };
 }
 function load() {
@@ -487,6 +555,7 @@ function normalize(s) {
   s.channels = Array.isArray(s.channels) ? s.channels : [];
   s.videos = Array.isArray(s.videos) ? s.videos : [];
   s.snapshots = toSnapMap(s.snapshots);
+  s.myChannel = normMy(s.myChannel);
   s.channels.forEach(function (c) {
     c.tag = c.tag || '';
     c.subsHistory = Array.isArray(c.subsHistory) ? c.subsHistory : [];
@@ -772,6 +841,311 @@ function refreshSubscribers(channels) {
   return step(0);
 }
 
+/* ==========================================================================
+   4b. 내 채널 — 등록 · 수집 · 스튜디오 CSV 병합
+   경쟁 채널과 같은 API 흐름(channels → playlistItems → videos)을 쓰되
+   쇼츠·롱폼을 모두 저장하고, state.myChannel 에 분리 보관합니다.
+   ========================================================================== */
+function myVideoById(id) { var a = state.myChannel.videos; for (var i = 0; i < a.length; i++) if (a[i].videoId === id) return a[i]; return null; }
+
+function registerMyChannel(raw) {
+  var p = parseChannelInput(raw);
+  if (!p) return Promise.reject(new Error('채널 주소·핸들(@이름)·채널ID 중 하나를 넣어주세요.'));
+  var params = { part: API.PART.CHANNEL };
+  if (p.type === 'id') params.id = p.value; else if (p.type === 'handle') params.forHandle = p.value; else params.forUsername = p.value;
+  return apiGet('channels', API.EP.CHANNELS, params).then(function (body) {
+    var it = body.items && body.items[0];
+    if (!it) throw new Error('채널을 찾을 수 없습니다: ' + p.value + '\n\n유튜브 스튜디오 → 설정 → 채널 에서 채널ID(UC로 시작)를 복사해 넣어보세요.');
+    var sn = it.snippet || {}, st = it.statistics || {}, cd = it.contentDetails || {};
+    var uploads = cd.relatedPlaylists && cd.relatedPlaylists.uploads;
+    if (!uploads) throw new Error('이 채널의 업로드 재생목록을 찾을 수 없습니다.');
+    var subs = st.hiddenSubscriberCount ? null : num(st.subscriberCount);
+    var ch = { id: it.id, title: sn.title || '(이름 없음)', handle: sn.customUrl || (p.type === 'handle' ? '@' + p.value : ''),
+               thumb: (sn.thumbnails && (sn.thumbnails.default || sn.thumbnails.medium) || {}).url || '',
+               subs: subs, subsFirst: subs, subsHistory: [{ t: Date.now(), s: subs }], registeredAt: Date.now(),
+               uploadsPlaylist: uploads, videoCount: num(st.videoCount), lastRefresh: 0 };
+    var keep = state.myChannel.channel && state.myChannel.channel.id === ch.id;
+    state.myChannel = keep ? Object.assign(state.myChannel, { channel: ch }) : Object.assign(defaultMy(), { channel: ch });
+    save();
+    return ch;
+  });
+}
+/** 업로드 재생목록 한 페이지 → { ids, next } */
+function fetchMyPage(token) {
+  var ch = state.myChannel.channel;
+  var params = { part: API.PART.PLAYLIST_ITEM, playlistId: ch.uploadsPlaylist, maxResults: API.MAX_RESULTS };
+  if (token) params.pageToken = token;
+  return apiGet('playlistItems', API.EP.PLAYLIST_ITEMS, params).then(function (body) {
+    var ids = [];
+    (body.items || []).forEach(function (it) { var vid = it.contentDetails && it.contentDetails.videoId; if (vid && ids.indexOf(vid) === -1) ids.push(vid); });
+    return { ids: ids, next: body.nextPageToken || '' };
+  });
+}
+/** 상세 수집 — 쇼츠·롱폼 모두 저장하고 스냅샷 1건 기록 */
+function fetchMyDetails(ids) {
+  var batches = [];
+  for (var i = 0; i < ids.length; i += API.ID_BATCH) batches.push(ids.slice(i, i + API.ID_BATCH));
+  var now = Date.now(), stats = { added: 0, updated: 0 };
+  function step(i) {
+    if (i >= batches.length) return Promise.resolve(stats);
+    return apiGet('videos', API.EP.VIDEOS, { part: API.PART.VIDEO, id: batches[i].join(','), maxResults: API.MAX_RESULTS }).then(function (body) {
+      (body.items || []).forEach(function (it) {
+        var cd = it.contentDetails || {}, sn = it.snippet || {}, st = it.statistics || {};
+        var dur = isoToSec(cd.duration);
+        var v = myVideoById(it.id);
+        if (!v) { v = { videoId: it.id, title: '', publishedAt: '', durationSec: 0, thumb: '', type: 'long' }; state.myChannel.videos.push(v); stats.added++; }
+        else stats.updated++;
+        v.title = sn.title || v.title; v.publishedAt = sn.publishedAt || v.publishedAt;
+        v.durationSec = dur; v.type = videoType(dur);
+        v.thumb = (sn.thumbnails && (sn.thumbnails.medium || sn.thumbnails.default) || {}).url || v.thumb;
+        (state.snapshots[it.id] || (state.snapshots[it.id] = [])).push({ t: now, v: num(st.viewCount), l: num(st.likeCount), c: num(st.commentCount) });
+      });
+      return step(i + 1);
+    });
+  }
+  return step(0);
+}
+/** 최신 영상 N페이지 수집 (등록 직후 4페이지 / 더보기 1페이지). nextPageToken 을 이어갑니다. */
+function collectMyVideos(pages) {
+  var my = state.myChannel, ids = [], token = my.nextPageToken || '', n = 0;
+  if (!my.channel) return Promise.reject(new Error('내 채널이 등록되지 않았습니다.'));
+  function finish() {
+    return (ids.length ? fetchMyDetails(ids) : Promise.resolve({ added: 0, updated: 0 })).then(function (st) {
+      my.channel.lastRefresh = Date.now();
+      if (state.settings.autoPrune) pruneSnapshots();
+      save(); st.hasMore = !!my.nextPageToken; return st;
+    });
+  }
+  function step() {
+    if (n >= pages) return finish();
+    return fetchMyPage(token).then(function (r) {
+      ids = ids.concat(r.ids); token = r.next; my.nextPageToken = token; n++;
+      return token ? step() : finish();
+    });
+  }
+  return step();
+}
+/** 내 채널 구독자 갱신 (channels.list 1유닛) */
+function refreshMySubs() {
+  var ch = state.myChannel.channel;
+  return apiGet('channels', API.EP.CHANNELS, { part: 'snippet,statistics', id: ch.id }).then(function (body) {
+    var it = body.items && body.items[0]; if (!it) return;
+    var st = it.statistics || {}, subs = st.hiddenSubscriberCount ? null : num(st.subscriberCount);
+    ch.subs = subs; if (ch.subsFirst == null) ch.subsFirst = subs; ch.videoCount = num(st.videoCount) || ch.videoCount;
+    ch.subsHistory.push({ t: Date.now(), s: subs }); if (ch.subsHistory.length > 60) ch.subsHistory = ch.subsHistory.slice(-60);
+  });
+}
+/** 새로고침: 구독자 1 + 최신 1페이지(새 업로드 포착) 1 + 전체 상세 ceil(n/50) */
+function refreshMyChannel() {
+  var my = state.myChannel;
+  if (!my.channel) return Promise.resolve({ added: 0, updated: 0 });
+  return refreshMySubs().then(function () { return fetchMyPage(''); }).then(function (r) {
+    var ids = my.videos.map(function (v) { return v.videoId; });
+    r.ids.forEach(function (id) { if (ids.indexOf(id) === -1) ids.push(id); });
+    return fetchMyDetails(ids);
+  }).then(function (st) {
+    my.channel.lastRefresh = Date.now();
+    if (state.settings.autoPrune) pruneSnapshots();
+    save(); return st;
+  });
+}
+function estimateMyCost() {
+  var my = state.myChannel; if (!my.channel) return 0;
+  return 2 + Math.ceil(Math.max(1, my.videos.length) / API.ID_BATCH);
+}
+function runMyTask(label, task) {
+  if (ui.busy) { toast('이미 새로고침 중입니다'); return Promise.resolve(); }
+  if (!(state.apiKey || '').trim()) { toast('설정 탭에서 API 키를 먼저 입력하세요', 'err'); ui.tab = 'settings'; render(); return Promise.resolve(); }
+  ui.busy = true; render(); setBusyLabel(label);
+  var startUsed = state.quota.used;
+  return task().then(function (st) {
+    ui.busy = false; render();
+    toast(label + ' 완료 · 새 영상 ' + (st.added || 0) + '개 · 갱신 ' + (st.updated || 0) + '개 (쿼터 ' + (state.quota.used - startUsed) + '유닛)', 'ok');
+  }, function (e) {
+    ui.busy = false; render();
+    alert(label + ' 실패\n\n' + (e && e.message));
+  });
+}
+
+/* ---------- 스튜디오 CSV: 파서 (따옴표·쉼표·줄바꿈 이스케이프, BOM, 쉼표/탭 구분자) ---------- */
+function parseCsvText(text) {
+  text = String(text || '').replace(/^﻿/, '');
+  var firstLine = text.split(/\r?\n/)[0] || '';
+  var delim = (firstLine.split('\t').length > firstLine.split(',').length) ? '\t' : ',';
+  var rows = [], row = [], field = '', inQ = false, line = 1, i = 0, n = text.length;
+  while (i < n) {
+    var c = text[i];
+    if (inQ) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i += 2; continue; } inQ = false; i++; continue; }
+      if (c === '\n') line++;
+      field += c; i++; continue;
+    }
+    if (c === '"') { inQ = true; i++; continue; }
+    if (c === delim) { row.push(field); field = ''; i++; continue; }
+    if (c === '\r' || c === '\n') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); field = ''; rows.push(row); row = []; line++; i++; continue;
+    }
+    field += c; i++;
+  }
+  if (inQ) throw new Error('CSV 파싱 실패: ' + line + '행에서 닫히지 않은 따옴표(")가 있습니다.');
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  rows = rows.filter(function (r) { return r.some(function (x) { return String(x).trim() !== ''; }); });
+  if (!rows.length) throw new Error('CSV 파싱 실패: 내용이 비어 있습니다.');
+  var hc = rows[0].length;
+  for (var k = 1; k < rows.length; k++) {
+    if (rows[k].length > hc) throw new Error('CSV 파싱 실패: ' + (k + 1) + '행의 컬럼이 ' + rows[k].length + '개로 헤더(' + hc + '개)보다 많습니다. 구분자(' + (delim === '\t' ? '탭' : '쉼표') + ')나 따옴표 처리를 확인하세요.');
+    while (rows[k].length < hc) rows[k].push('');
+  }
+  return { rows: rows, delim: delim };
+}
+function normHeader(h) { return String(h || '').toLowerCase().replace(/[\s()%:：·\-_"'.]/g, ''); }
+function mapStudioHeaders(headers) {
+  var idx = {}, unknown = [];
+  headers.forEach(function (h, i) {
+    var nh = normHeader(h), hit = null;
+    Object.keys(STUDIO_COLS).forEach(function (k) { if (!hit && idx[k] == null && STUDIO_COLS[k].keys.indexOf(nh) > -1) hit = k; });
+    if (hit) idx[hit] = i; else unknown.push(h);
+  });
+  return { idx: idx, unknown: unknown };
+}
+function parseStudioNumber(s) {
+  if (s == null) return null;
+  var t = String(s).trim().replace(/[,%\s]/g, '');
+  if (t === '' || t === '—' || t === '-' || /^n\/?a$/i.test(t)) return null;
+  var v = parseFloat(t); return isFinite(v) ? v : null;
+}
+function parseDurationCell(s) {
+  if (s == null) return null;
+  var t = String(s).trim(); if (!t) return null;
+  if (/^\d+(\.\d+)?$/.test(t)) return parseFloat(t);
+  var parts = t.split(':').map(function (x) { return parseFloat(x); });
+  if (parts.some(function (x) { return !isFinite(x); })) return null;
+  var sec = 0; parts.forEach(function (x) { sec = sec * 60 + x; }); return sec;
+}
+function normTitle(t) { return String(t || '').toLowerCase().replace(/[\s​]+/g, ' ').replace(/[#|｜·"'“”‘’]/g, '').trim(); }
+function importStudioCsv(text) {
+  var parsed = parseCsvText(text), rows = parsed.rows, headers = rows[0];
+  var m = mapStudioHeaders(headers), idx = m.idx;
+  if (idx.videoId == null && idx.title == null) {
+    throw new Error('영상을 식별할 컬럼을 찾지 못했습니다.\n"콘텐츠"/"Content"(영상 ID) 또는 "동영상 제목"/"Video title" 중 하나가 필요합니다.\n\n발견된 헤더: ' + headers.join(' | '));
+  }
+  var metrics = STUDIO_METRIC_KEYS.filter(function (k) { return idx[k] != null; });
+  if (!metrics.length) throw new Error('지표 컬럼(노출수·노출 클릭률·평균 시청 지속 시간·평균 조회율·구독자 등)을 하나도 찾지 못했습니다.\n\n발견된 헤더: ' + headers.join(' | '));
+  var st = state.myChannel.studio, byId = {}, unmatched = [], matched = 0, skipped = 0;
+  var byTitle = {}, byNorm = {};
+  state.myChannel.videos.forEach(function (v) { byTitle[v.title] = v.videoId; byNorm[normTitle(v.title)] = v.videoId; });
+  for (var r = 1; r < rows.length; r++) {
+    var row = rows[r];
+    var idCell = idx.videoId != null ? String(row[idx.videoId] || '').trim() : '';
+    var title = idx.title != null ? String(row[idx.title] || '').trim() : '';
+    if (/^(합계|total|totals)$/i.test(idCell) || /^(합계|total|totals)$/i.test(title) || (!idCell && !title)) { skipped++; continue; }
+    var rec = { rowNo: r + 1, videoId: /^[\w-]{11}$/.test(idCell) ? idCell : '', title: title, metrics: {} };
+    metrics.forEach(function (k) {
+      var cell = row[idx[k]];
+      rec.metrics[k] = k === 'avgDuration' ? parseDurationCell(cell) : parseStudioNumber(cell);
+    });
+    var vid = (rec.videoId && myVideoById(rec.videoId)) ? rec.videoId : (byTitle[title] || byNorm[normTitle(title)] || '');
+    if (vid) { byId[vid] = Object.assign({ matchedBy: rec.videoId === vid ? 'id' : 'title', rowNo: rec.rowNo }, rec.metrics); matched++; }
+    else unmatched.push(rec);
+  }
+  st.headers = headers; st.byVideoId = byId; st.unmatched = unmatched; st.metrics = metrics; st.importedAt = Date.now();
+  save();
+  return { matched: matched, unmatched: unmatched.length, skipped: skipped, metrics: metrics, unknownHeaders: m.unknown };
+}
+function manualMatch(rowNo, videoId) {
+  var st = state.myChannel.studio, i = -1;
+  st.unmatched.forEach(function (u, k) { if (u.rowNo === rowNo) i = k; });
+  if (i < 0 || !videoId) return false;
+  var rec = st.unmatched.splice(i, 1)[0];
+  st.byVideoId[videoId] = Object.assign({ matchedBy: 'manual', rowNo: rec.rowNo }, rec.metrics);
+  save(); return true;
+}
+
+/* ---------- 내 채널 지표 ---------- */
+var KST_FMT = null;
+function kstParts(iso) {
+  var d = new Date(iso); if (isNaN(d.getTime())) return null;
+  try {
+    KST_FMT = KST_FMT || new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+    var o = {}; KST_FMT.formatToParts(d).forEach(function (p) { o[p.type] = p.value; });
+    var hour = num(o.hour) % 24;
+    return { weekday: (o.weekday || '').replace(/[^일월화수목금토]/g, ''), hour: hour, hm: String(hour).padStart(2, '0') + ':' + (o.minute || '00'),
+             date: o.year + '-' + o.month + '-' + o.day };
+  } catch (e) { return { weekday: DAY_NAMES[d.getDay()], hour: d.getHours(), hm: String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'), date: fmtDate(iso).replace(/\./g, '-') }; }
+}
+function hourBand(h) { return h < 6 ? '새벽(0-5시)' : h < 12 ? '오전(6-11시)' : h < 18 ? '오후(12-17시)' : '저녁(18-23시)'; }
+function hasEmoji(s) { try { return /\p{Extended_Pictographic}/u.test(String(s || '')); } catch (e) { return /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(String(s || '')); } }
+function myRow(v) {
+  var sn = snapsOf(v.videoId), last = sn.length ? sn[sn.length - 1] : { v: 0, l: 0, c: 0 }, first = sn.length ? sn[0] : null;
+  var views = last.v, likes = last.l, comments = last.c;
+  var m = velocity(v), k = kstParts(v.publishedAt);
+  return { v: v, views: views, likes: likes, comments: comments,
+           likeRate: views > 0 ? likes / views * 100 : null, commentRate: views > 0 ? comments / views * 100 : null,
+           vph: m.vph, basis: m.basis,
+           growth: (sn.length >= 2 && first.v > 0) ? (last.v - first.v) / first.v * 100 : null,
+           snaps: sn.length, kst: k, ageDays: Math.floor(hoursSince(v.publishedAt) / 24),
+           studio: state.myChannel.studio.byVideoId[v.videoId] || null };
+}
+function myRows() {
+  var rows = state.myChannel.videos.map(myRow);
+  var type = ui.myType || 'all', period = ui.myPeriod || 'all';
+  if (type !== 'all') rows = rows.filter(function (r) { return r.v.type === type; });
+  if (period !== 'all') { var cut = Date.now() - num(period) * 86400000; rows = rows.filter(function (r) { return new Date(r.v.publishedAt).getTime() >= cut; }); }
+  var key = ui.mySort || 'views', dir = (ui.myDir || 'desc') === 'asc' ? 1 : -1;
+  var val = function (r) {
+    if (key === 'date') return new Date(r.v.publishedAt).getTime() || 0;
+    if (key === 'duration') return r.v.durationSec;
+    if (key === 'title') return r.v.title;
+    var x = r[key]; return x == null ? -Infinity : x;
+  };
+  rows.sort(function (a, b) { var x = val(a), y = val(b); if (x === y) return 0; if (typeof x === 'string') return x.localeCompare(y) * dir; return (x > y ? 1 : -1) * dir; });
+  return rows;
+}
+function mySummary(rows) {
+  var n = rows.length, views = rows.map(function (r) { return r.views; }).sort(function (a, b) { return a - b; });
+  var total = views.reduce(function (s, x) { return s + x; }, 0);
+  var med = n ? (n % 2 ? views[(n - 1) / 2] : (views[n / 2 - 1] + views[n / 2]) / 2) : 0;
+  var shorts = rows.filter(function (r) { return r.v.type === 'shorts'; }).length;
+  return { n: n, total: total, avg: n ? total / n : 0, med: med, shorts: shorts, long: n - shorts };
+}
+function myInsights(rows) {
+  if (!rows.length) return null;
+  var byViews = rows.slice().sort(function (a, b) { return b.views - a.views; });
+  var top = byViews.slice(0, Math.max(1, Math.ceil(rows.length * MY.TOP_PERCENT)));
+  var words = {}, days = {}, bands = {}, dur = 0;
+  top.forEach(function (r) {
+    var seen = {};
+    tokenize(r.v.title).forEach(function (w) { if (STOPWORDS.indexOf(w) > -1 || seen[w]) return; seen[w] = 1; words[w] = (words[w] || 0) + 1; });
+    if (r.kst) { days[r.kst.weekday] = (days[r.kst.weekday] || 0) + 1; var b = hourBand(r.kst.hour); bands[b] = (bands[b] || 0) + 1; }
+    dur += r.v.durationSec;
+  });
+  var topList = function (o) { return Object.keys(o).map(function (k) { return { k: k, n: o[k] }; }).sort(function (a, b) { return b.n - a.n || a.k.localeCompare(b.k); }); };
+  return { count: top.length, minViews: top[top.length - 1].views, words: topList(words).filter(function (w) { return w.n >= 2 || top.length < 4; }).slice(0, MY.MAX_TITLE_WORDS),
+           avgDur: dur / top.length, day: topList(days)[0] || null, band: topList(bands)[0] || null,
+           shortsShare: top.filter(function (r) { return r.v.type === 'shorts'; }).length / top.length };
+}
+/* ---------- AI 분석용 CSV ---------- */
+function buildAnalysisCsv() {
+  var rows = state.myChannel.videos.map(myRow).sort(function (a, b) { return b.views - a.views; });
+  var withStudio = state.myChannel.studio.metrics.length && Object.keys(state.myChannel.studio.byVideoId).length;
+  var head = ['videoId', '제목', '제목길이', '이모지포함여부', '게시일', '게시요일', '게시시간(KST)', '게시후경과일', '길이(초)', '유형',
+              '조회수', '좋아요', '댓글수', '좋아요비율(%)', '댓글비율(%)', '시간당조회수', '첫스냅샷대비증가율(%)'];
+  if (withStudio) head = head.concat(['노출수', '노출클릭률(%)', '평균시청지속시간(초)', '평균조회율(%)', '구독자증감']);
+  var q = function (s) { return '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"'; };
+  var f1 = function (x) { return x == null ? '' : Math.round(x * 100) / 100; };
+  var lines = [head.map(q).join(',')];
+  rows.forEach(function (r) {
+    var k = r.kst || {}, st = r.studio || {};
+    var line = [r.v.videoId, r.v.title, Array.from(r.v.title).length, hasEmoji(r.v.title) ? 'Y' : 'N', k.date || fmtDate(r.v.publishedAt), k.weekday || '', k.hm || '',
+                r.ageDays, r.v.durationSec, r.v.type === 'shorts' ? '쇼츠' : '롱폼', r.views, r.likes, r.comments,
+                f1(r.likeRate), f1(r.commentRate), Math.round(r.vph), f1(r.growth)];
+    if (withStudio) line = line.concat([st.impressions == null ? '' : st.impressions, f1(st.ctr), st.avgDuration == null ? '' : Math.round(st.avgDuration), f1(st.avgPct), st.subs == null ? '' : st.subs]);
+    lines.push(line.map(q).join(','));
+  });
+  return { csv: String.fromCharCode(0xFEFF) + lines.join('\r\n'), rows: rows.length, withStudio: !!withStudio, columns: head };
+}
+
 /** 예상 쿼터: 구독자 갱신 + (페이지 수 + 영상 배치 수) × 채널 수 */
 function estimateCost(nChannels) {
   var pages = state.settings.pages;
@@ -781,10 +1155,11 @@ function estimateCost(nChannels) {
 
 function runRefresh(channels, label) {
   if (ui.busy) { toast('이미 새로고침 중입니다'); return Promise.resolve(); }
-  if (!channels.length) { toast('새로고침할 채널이 없습니다', 'err'); return Promise.resolve(); }
+  var hasMy = !!(state.myChannel && state.myChannel.channel);
+  if (!channels.length && !hasMy) { toast('새로고침할 채널이 없습니다', 'err'); return Promise.resolve(); }
   if (!(state.apiKey || '').trim()) { toast('설정 탭에서 API 키를 먼저 입력하세요', 'err'); ui.tab = 'settings'; render(); return Promise.resolve(); }
 
-  var est = estimateCost(channels.length);
+  var est = estimateCost(channels.length) + (hasMy ? estimateMyCost() : 0);   /* 내 채널 몫도 합산 */
   if (est > quotaLeft()) {
     alert('예상 사용량(' + est + '유닛)이 남은 할당량(' + quotaLeft() + '유닛)보다 많습니다.\n' +
           '태평양 시간 자정(약 ' + untilQuotaReset() + ' 후)에 초기화됩니다.\n\n' +
@@ -793,7 +1168,7 @@ function runRefresh(channels, label) {
   }
 
   ui.busy = true; render();
-  var done = 0, totalTracked = 0, errors = [];
+  var done = 0, totalTracked = 0, errors = [], myDone = false;
   var startUsed = state.quota.used;
 
   return refreshSubscribers(channels).catch(function (e) { errors.push('구독자 갱신: ' + e.message); })
@@ -811,6 +1186,12 @@ function runRefresh(channels, label) {
       }
       return step(0);
     })
+    .then(function () {
+      /* 내 채널도 같은 새로고침에서 스냅샷을 쌓습니다 */
+      if (!hasMy) return;
+      setBusyLabel((label || '새로고침') + ' — 내 채널 ' + state.myChannel.channel.title);
+      return refreshMyChannel().then(function () { myDone = true; }, function (e) { errors.push('내 채널: ' + e.message); });
+    })
     .catch(function (e) { if (e && e.message && errors.indexOf(e.message) === -1) errors.push(e.message); })
     .then(function () {
       ui.busy = false; save(); render();
@@ -818,7 +1199,7 @@ function runRefresh(channels, label) {
       if (errors.length) {
         alert('새로고침 중 문제가 있었습니다.\n\n' + errors.slice(0, 5).join('\n\n'));
       }
-      toast('채널 ' + done + '개 · 쇼츠 ' + totalTracked + '개 갱신 (쿼터 ' + used + '유닛 사용)', errors.length ? 'err' : 'ok');
+      toast('채널 ' + done + '개 · 쇼츠 ' + totalTracked + '개' + (myDone ? ' · 내 채널' : '') + ' 갱신 (쿼터 ' + used + '유닛 사용)', errors.length ? 'err' : 'ok');
     });
 }
 function setBusyLabel(t) {
@@ -941,12 +1322,13 @@ var TABS = [
   { id: 'dash',     name: '급상승',   icon: '🚀' },
   { id: 'titles',   name: '제목 패턴', icon: '🔤' },
   { id: 'channels', name: '채널',     icon: '📺' },
+  { id: 'mine',     name: '내 채널',  icon: '🙋' },
   { id: 'keywords', name: '키워드',   icon: '💡' },
   { id: 'settings', name: '설정',     icon: '⚙️' }
 ];
 
 function render() {
-  var counts = { dash: state.videos.length, titles: '', channels: state.channels.length, keywords: '', settings: '' };
+  var counts = { dash: state.videos.length, titles: '', channels: state.channels.length, mine: state.myChannel.videos.length, keywords: '', settings: '' };
   $('#tabs').innerHTML = TABS.map(function (t) {
     return '<button class="tab' + (ui.tab === t.id ? ' active' : '') + '" data-tab="' + t.id + '">' +
       t.icon + ' ' + t.name + (counts[t.id] ? '<span class="cnt">' + counts[t.id] + '</span>' : '') + '</button>';
@@ -960,6 +1342,7 @@ function render() {
   if (ui.tab === 'dash') viewDash(v);
   else if (ui.tab === 'titles') viewTitles(v);
   else if (ui.tab === 'channels') viewChannels(v);
+  else if (ui.tab === 'mine') viewMine(v);
   else if (ui.tab === 'keywords') viewKeywords(v);
   else viewSettings(v);
 
@@ -1535,6 +1918,177 @@ function viewKeywords(v) {
 }
 
 /* ==========================================================================
+   12b. 내 채널 뷰
+   ========================================================================== */
+function viewMine(v) {
+  var my = state.myChannel, ch = my.channel, hasKey = !!(state.apiKey || '').trim();
+  ui.myType = ui.myType || 'all'; ui.myPeriod = ui.myPeriod || 'all'; ui.mySort = ui.mySort || 'views'; ui.myDir = ui.myDir || 'desc';
+  var head = secTitle('내 채널',
+    '내 채널의 영상을 모두 모아 <b>AI 분석용 CSV 한 장</b>으로 내보냅니다. 스튜디오 분석 CSV 를 끌어다 놓으면 노출수·클릭률·시청 지속 시간까지 합쳐집니다.',
+    ch ? '<button class="btn" id="myRefresh"' + (ui.busy ? ' disabled' : '') + '>↻ 내 채널 새로고침</button>' : '');
+
+  var tip = '<div class="tip">🙋 <b>사용법</b> — ① 내 채널 주소를 등록하면 최신 200개까지 자동 수집(쇼츠·롱폼 모두) ② 필요하면 <b>더보기</b>로 50개씩 추가 ' +
+    '③ (선택) 유튜브 스튜디오 → 분석 → 콘텐츠 표에서 <b>내보내기 → CSV</b> 한 파일을 끌어다 놓아 병합 ④ <b>분석용 CSV 내보내기</b> 후 추천 질문과 함께 클로드에 첨부.</div>';
+
+  if (!ch) {
+    v.innerHTML = head + tip +
+      '<div class="card" style="margin-bottom:14px"><h3>내 채널 등록</h3><div class="row">' +
+        '<input class="input" id="myInput" style="flex:1;min-width:210px" placeholder="https://www.youtube.com/@내채널  또는  @내채널  또는  UCxxxxxxxx" autocomplete="off"' + (hasKey ? '' : ' disabled') + '>' +
+        '<button class="btn primary" id="myAdd"' + (hasKey ? '' : ' disabled') + '>등록 + 최신 200개 수집</button></div>' +
+        '<p class="dim" style="font-size:12px;margin:9px 0 0">등록 1유닛 + 수집 약 8유닛(4페이지 × 2)이 듭니다. 경쟁 채널 목록에는 들어가지 않습니다.</p>' +
+        (hasKey ? '' : '<div class="tip" style="margin:10px 0 0">🔑 먼저 <b data-go="settings" style="cursor:pointer;text-decoration:underline">설정 탭</b>에서 API 키를 입력하세요.</div>') +
+      '</div>' +
+      emptyBox('🙋', '내 채널이 등록되지 않았습니다', '위 칸에 채널 주소를 넣고 등록하세요. 채널ID 는 유튜브 스튜디오 → 설정 → 채널 → 고급 설정에서 볼 수 있습니다.',
+        ['등록하면 업로드 목록에서 최신 200개 영상의 제목·게시일·길이·조회수·좋아요·댓글을 가져옵니다.',
+         '새로고침할 때마다 조회수 스냅샷이 쌓여 <b>시간당 조회수</b>와 <b>증가율</b>이 계산됩니다.',
+         '스튜디오 CSV 를 합치면 API 로는 볼 수 없는 노출수·클릭률·시청 지속 시간까지 한 표에 들어갑니다.'], '');
+    bindGo(v);
+    on('#myAdd', 'click', doRegister, v);
+    on('#myInput', 'keydown', function (e) { if (e.key === 'Enter') doRegister(); }, v);
+    return;
+  }
+
+  var rows = myRows(), all = my.videos.map(myRow), sum = mySummary(all), ins = myInsights(all);
+  var st = my.studio, hasStudio = st.metrics.length > 0 && Object.keys(st.byVideoId).length > 0;
+  var lock = ui.busy ? ' disabled' : '';
+
+  var chCard = '<div class="card" style="margin-bottom:14px"><div class="row" style="justify-content:space-between">' +
+    '<div class="row" style="gap:12px;min-width:0">' +
+      (ch.thumb ? '<img class="ch-av" src="' + esc(ch.thumb) + '" alt="" onerror="this.style.visibility=\'hidden\'">' : '<div class="ch-av"></div>') +
+      '<div style="min-width:0"><div class="ch-name">' + esc(ch.title) + ' <span class="badge b-accent">내 채널</span></div>' +
+      '<div class="ch-sub">' + esc(ch.handle || ch.id) + ' · 구독자 ' + (ch.subs == null ? '비공개' : fmtNum(ch.subs)) +
+        (ch.subsFirst != null && ch.subs != null && ch.subs !== ch.subsFirst ? ' (' + (ch.subs > ch.subsFirst ? '▲' : '▼') + fmtNum(Math.abs(ch.subs - ch.subsFirst)) + ')' : '') +
+        ' · 채널 전체 ' + fmtInt(ch.videoCount) + '개 중 <b>' + my.videos.length + '개 수집</b>' +
+        (ch.lastRefresh ? ' · 마지막 새로고침 ' + ago(ch.lastRefresh) : '') + '</div></div></div>' +
+    '<div class="row" style="gap:6px">' +
+      '<button class="btn sm" id="myMore"' + (lock || (my.nextPageToken ? '' : ' disabled')) + ' title="' + (my.nextPageToken ? '다음 50개 (2유닛)' : '더 가져올 영상이 없습니다') + '">＋ 더보기 (50개)</button>' +
+      '<button class="btn sm danger" id="myRemove"' + lock + '>🗑 채널 해제</button></div></div></div>';
+
+  var cards = '<div class="grid3" style="margin-bottom:14px">' +
+    '<div class="stat"><div class="k">총 영상</div><div class="v">' + sum.n + ' <small>쇼츠 ' + sum.shorts + ' · 롱폼 ' + sum.long + '</small></div>' +
+      '<div class="ratio" style="margin-top:8px"><i class="rs" style="width:' + (sum.n ? Math.round(sum.shorts / sum.n * 100) : 0) + '%"></i><i class="rl" style="flex:1"></i></div>' +
+      '<div class="dim" style="font-size:11.5px;margin-top:5px">쇼츠 ' + (sum.n ? Math.round(sum.shorts / sum.n * 100) : 0) + '% · 롱폼 ' + (sum.n ? Math.round(sum.long / sum.n * 100) : 0) + '%</div></div>' +
+    '<div class="stat"><div class="k">총 조회수</div><div class="v">' + fmtNum(sum.total) + '</div><div class="dim" style="font-size:11.5px;margin-top:5px">수집한 ' + sum.n + '개 기준 · 최근 스냅샷</div></div>' +
+    '<div class="stat"><div class="k">평균 / 중앙값 조회수</div><div class="v">' + fmtNum(Math.round(sum.avg)) + ' <small>/ ' + fmtNum(Math.round(sum.med)) + '</small></div>' +
+      '<div class="dim" style="font-size:11.5px;margin-top:5px">평균이 중앙값보다 훨씬 크면 히트작 몇 개가 끌어올린 것</div></div></div>';
+
+  var insight = ins ? '<div class="card" style="margin-bottom:14px"><h3>💡 조회수 상위 20% 영상의 공통점 <span class="sub">' + ins.count + '개 · ' + fmtNum(ins.minViews) + '회 이상</span></h3>' +
+    '<div class="grid3">' +
+      '<div><div class="k dim" style="font-size:11.5px;font-weight:600">자주 쓴 제목 단어</div><div style="margin-top:5px">' +
+        (ins.words.length ? ins.words.map(function (w) { return '<span class="badge b-accent" style="margin:0 4px 4px 0">' + esc(w.k) + ' <span class="dim">×' + w.n + '</span></span>'; }).join('') : '<span class="dim">공통 단어 없음</span>') + '</div></div>' +
+      '<div><div class="k dim" style="font-size:11.5px;font-weight:600">평균 길이 · 유형</div><div style="font-size:18px;font-weight:800;margin-top:3px">' + fmtDur(ins.avgDur) +
+        ' <small class="dim" style="font-size:12px;font-weight:600">쇼츠 ' + Math.round(ins.shortsShare * 100) + '%</small></div></div>' +
+      '<div><div class="k dim" style="font-size:11.5px;font-weight:600">최빈 게시 요일 · 시간대 (KST)</div><div style="font-size:18px;font-weight:800;margin-top:3px">' +
+        (ins.day ? ins.day.k + '요일' : '-') + ' <small class="dim" style="font-size:12px;font-weight:600">' + (ins.band ? ins.band.k : '') + '</small></div></div>' +
+    '</div></div>' : '';
+
+  var studioCard = '<div class="card" style="margin-bottom:14px"><h3>📥 스튜디오 CSV 병합 <span class="sub">선택 · 유튜브 스튜디오 → 분석 → 콘텐츠 표 → 내보내기(CSV)</span></h3>' +
+    '<div class="drop" id="drop">여기에 CSV 파일을 끌어다 놓거나 클릭해서 선택<br><span class="dim" style="font-size:12px">한국어·영어 헤더 모두 인식 · 영상 ID(콘텐츠) 또는 제목으로 매칭</span>' +
+    '<input type="file" id="studioFile" accept=".csv,.tsv,text/csv,text/plain" style="display:none"></div>' +
+    (st.importedAt ? '<div class="stat" style="margin-top:10px">마지막 가져오기 ' + ago(st.importedAt) + ' · 매칭 <b>' + Object.keys(st.byVideoId).length + '개</b> · 미매칭 <b>' + st.unmatched.length + '개</b> · 인식된 지표: ' +
+        st.metrics.map(function (k) { return '<span class="badge b-gray">' + STUDIO_COLS[k].label + '</span>'; }).join(' ') + '</div>' : '') +
+    (st.unmatched.length ? '<div style="margin-top:12px"><div class="k dim" style="font-size:12px;font-weight:700;margin-bottom:6px">매칭 실패한 행 — 어느 영상인지 골라주세요</div>' +
+      '<div class="table-wrap"><table class="rank"><thead><tr><th>CSV 행</th><th>CSV 의 제목/ID</th><th>내 영상</th></tr></thead><tbody>' +
+      st.unmatched.slice(0, 30).map(function (u) {
+        return '<tr><td class="dim">' + u.rowNo + '행</td><td><span class="vt">' + esc(u.title || u.videoId || '(비어 있음)') + '</span></td>' +
+          '<td><select data-match="' + u.rowNo + '" style="width:auto;max-width:360px"><option value="">— 선택 —</option>' +
+          my.videos.map(function (x) { return '<option value="' + esc(x.videoId) + '">' + esc(x.title.slice(0, 60)) + '</option>'; }).join('') + '</select></td></tr>';
+      }).join('') + '</tbody></table></div>' + (st.unmatched.length > 30 ? '<p class="dim" style="font-size:12px">…외 ' + (st.unmatched.length - 30) + '행</p>' : '') + '</div>' : '') +
+    '</div>';
+
+  var filters = '<div class="card" style="margin-bottom:14px"><div class="row">' +
+    '<select id="myType" style="width:auto">' + [['all', '쇼츠 + 롱폼'], ['shorts', '쇼츠만'], ['long', '롱폼만']].map(function (o) { return '<option value="' + o[0] + '"' + (ui.myType === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
+    '<select id="myPeriod" style="width:auto">' + [['all', '전체 기간'], ['7', '최근 7일'], ['30', '최근 30일'], ['90', '최근 90일'], ['365', '최근 1년']].map(function (o) { return '<option value="' + o[0] + '"' + (ui.myPeriod === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
+    '<select id="mySort" style="width:auto">' + [['views', '조회수'], ['vph', '시간당 조회수'], ['date', '게시일'], ['likeRate', '좋아요/조회 비율'], ['commentRate', '댓글/조회 비율'], ['growth', '첫 스냅샷 대비 증가율'], ['duration', '길이']].map(function (o) { return '<option value="' + o[0] + '"' + (ui.mySort === o[0] ? ' selected' : '') + '>' + o[1] + '순</option>'; }).join('') + '</select>' +
+    '<button class="btn" id="myDir">' + (ui.myDir === 'desc' ? '▼ 내림차순' : '▲ 오름차순') + '</button>' +
+    '<span class="dim" style="font-size:12px">' + rows.length + '개 표시 (전체 ' + my.videos.length + '개)</span></div></div>';
+
+  var pct = function (x) { return x == null ? '<span class="dim">-</span>' : (Math.round(x * 100) / 100).toFixed(2) + '%'; };
+  var table = rows.length ? '<div class="table-wrap"><table class="rank"><thead><tr>' +
+    '<th>제목</th><th>게시 (KST)</th><th>길이</th><th class="num">조회수</th><th class="num hide-sm">좋아요</th><th class="num hide-sm">댓글</th>' +
+    '<th class="num hide-sm">좋아요/조회</th><th class="num hide-sm">댓글/조회</th><th class="num">시간당</th>' +
+    (hasStudio ? '<th class="num hide-sm">노출수</th><th class="num hide-sm">CTR</th><th class="num hide-sm">평균시청</th><th class="num hide-sm">조회율</th><th class="num hide-sm">구독</th>' : '') +
+    '</tr></thead><tbody>' + rows.map(function (r) {
+      var k = r.kst || {}, s2 = r.studio;
+      return '<tr><td><span class="vt" title="' + esc(r.v.title) + '"><span class="badge ' + (r.v.type === 'shorts' ? 'b-short' : 'b-long') + '" style="margin-right:6px">' + (r.v.type === 'shorts' ? '쇼츠' : '롱폼') + '</span>' +
+        '<a href="' + API.WATCH_URL + esc(r.v.videoId) + '" target="_blank" rel="noopener" style="text-decoration:none;color:inherit">' + esc(r.v.title) + '</a></span></td>' +
+        '<td class="nowrap"><div>' + (k.date || fmtDate(r.v.publishedAt)) + '</div><div class="vm">' + (k.weekday ? k.weekday + '요일 ' + k.hm : '') + '</div></td>' +
+        '<td class="nowrap">' + fmtDur(r.v.durationSec) + '</td>' +
+        '<td class="num">' + fmtNum(r.views) + '</td><td class="num hide-sm">' + fmtNum(r.likes) + '</td><td class="num hide-sm">' + fmtNum(r.comments) + '</td>' +
+        '<td class="num hide-sm">' + pct(r.likeRate) + '</td><td class="num hide-sm">' + pct(r.commentRate) + '</td>' +
+        '<td class="num"><span class="vph" style="font-size:13px">' + fmtNum(Math.round(r.vph)) + '</span><div class="dim" style="font-size:10px">' + (r.basis === 'delta' ? '스냅샷 ' + r.snaps + '개' : '게시 후 평균') + '</div></td>' +
+        (hasStudio ? (s2
+          ? '<td class="num hide-sm">' + fmtNum(s2.impressions) + '</td><td class="num hide-sm">' + pct(s2.ctr) + '</td><td class="num hide-sm">' + (s2.avgDuration == null ? '-' : fmtDur(s2.avgDuration)) + '</td><td class="num hide-sm">' + pct(s2.avgPct) + '</td><td class="num hide-sm">' + (s2.subs == null ? '-' : (s2.subs > 0 ? '+' : '') + fmtInt(s2.subs)) + '</td>'
+          : '<td class="num hide-sm dim" colspan="5">스튜디오 데이터 없음</td>') : '') + '</tr>';
+    }).join('') + '</tbody></table></div>'
+    : '<div class="empty"><div class="ico">🔍</div><h4>조건에 맞는 영상이 없습니다</h4><p>필터를 바꿔 보세요.</p></div>';
+
+  var exportCard = '<div class="card" style="margin-top:14px"><h3>🤖 AI 분석용 CSV <span class="sub">영상당 1행 · UTF-8 BOM · 클로드에 첨부하세요</span></h3>' +
+    '<div class="row" style="margin-bottom:12px"><button class="btn primary" id="myExport">⬇ 분석용 CSV 내보내기 (' + my.videos.length + '행)</button>' +
+    '<span class="dim" style="font-size:12px">컬럼: videoId · 제목 · 제목길이 · 이모지 · 게시일/요일/시간(KST) · 경과일 · 길이 · 유형 · 조회/좋아요/댓글 · 비율 · 시간당조회수 · 증가율' + (hasStudio ? ' · <b>노출수 · CTR · 평균시청 · 조회율 · 구독증감</b>' : '') + '</span></div>' +
+    '<div class="k dim" style="font-size:12px;font-weight:700;margin-bottom:8px">클로드에게 물어볼 추천 질문 — CSV 를 첨부하고 아래 중 하나를 붙여넣으세요</div>' +
+    AI_PROMPTS.map(function (pmt, i) {
+      return '<div class="row" style="align-items:flex-start;margin-bottom:8px;flex-wrap:nowrap"><div class="prompt" style="flex:1">' + esc(pmt) + '</div><button class="btn sm" data-prompt="' + i + '">📋 복사</button></div>';
+    }).join('') + '</div>';
+
+  v.innerHTML = head + tip + chCard + cards + insight + studioCard + filters + table + exportCard;
+
+  on('#myRefresh', 'click', function () { runMyTask('내 채널 새로고침', refreshMyChannel); }, v);
+  on('#myMore', 'click', function () { runMyTask('더보기', function () { return collectMyVideos(MY.MORE_PAGES); }); }, v);
+  on('#myRemove', 'click', function () {
+    if (!confirm('내 채널 「' + ch.title + '」 등록을 해제하고 수집한 영상 ' + my.videos.length + '개와 스튜디오 병합 데이터를 지울까요?\n(스냅샷도 함께 삭제됩니다)')) return;
+    my.videos.forEach(function (x) { delete state.snapshots[x.videoId]; });
+    state.myChannel = defaultMy(); render(); toast('내 채널을 해제했습니다', 'ok');
+  }, v);
+  on('#myType', 'change', function (e) { ui.myType = e.currentTarget.value; render(); }, v);
+  on('#myPeriod', 'change', function (e) { ui.myPeriod = e.currentTarget.value; render(); }, v);
+  on('#mySort', 'change', function (e) { ui.mySort = e.currentTarget.value; render(); }, v);
+  on('#myDir', 'click', function () { ui.myDir = ui.myDir === 'desc' ? 'asc' : 'desc'; render(); }, v);
+  on('#myExport', 'click', function () {
+    if (!my.videos.length) { toast('내보낼 영상이 없습니다', 'err'); return; }
+    var out = buildAnalysisCsv();
+    download('my-channel-analysis-' + stamp() + '.csv', out.csv, 'text/csv;charset=utf-8');
+    toast('분석용 CSV ' + out.rows + '행을 내보냈습니다' + (out.withStudio ? ' (스튜디오 지표 포함)' : ''), 'ok');
+  }, v);
+  on('[data-prompt]', 'click', function (e) { copyText(AI_PROMPTS[+e.currentTarget.getAttribute('data-prompt')], '질문을 복사했습니다 — CSV 와 함께 클로드에 붙여넣으세요'); }, v);
+  on('[data-match]', 'change', function (e) {
+    var ok = manualMatch(+e.currentTarget.getAttribute('data-match'), e.currentTarget.value);
+    if (ok) { render(); toast('수동 매칭했습니다', 'ok'); }
+  }, v);
+
+  /* 드래그&드롭 + 클릭 선택 */
+  var drop = $('#drop', v), fileIn = $('#studioFile', v);
+  if (drop) {
+    drop.addEventListener('click', function (e) { if (e.target !== fileIn) fileIn.click(); });
+    ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
+    ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); }); });
+    drop.addEventListener('drop', function (e) { var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) readStudioFile(f); });
+    fileIn.addEventListener('change', function (e) { var f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) readStudioFile(f); });
+  }
+  function readStudioFile(f) {
+    var fr = new FileReader();
+    fr.onload = function () {
+      try {
+        var res = importStudioCsv(fr.result);
+        render();
+        toast('스튜디오 CSV 병합: 매칭 ' + res.matched + '개 · 미매칭 ' + res.unmatched + '개 · 지표 ' + res.metrics.length + '종', res.unmatched ? 'err' : 'ok');
+        if (res.unknownHeaders.length) console.info('[트래커] 인식하지 못한 스튜디오 컬럼:', res.unknownHeaders.join(' | '));
+      } catch (e) { alert('스튜디오 CSV 를 읽지 못했습니다.\n\n' + (e && e.message)); }
+    };
+    fr.onerror = function () { alert('파일을 읽지 못했습니다.'); };
+    fr.readAsText(f, 'utf-8');
+  }
+  function doRegister() {
+    var el = $('#myInput', v), raw = (el.value || '').trim();
+    if (!raw) { toast('채널 주소나 핸들을 입력하세요', 'err'); return; }
+    var btn = $('#myAdd', v); btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 등록 중';
+    registerMyChannel(raw).then(function () {
+      return runMyTask('최신 영상 수집', function () { return collectMyVideos(MY.INITIAL_PAGES); });
+    }, function (e) { btn.disabled = false; btn.textContent = '등록 + 최신 200개 수집'; alert(e.message || '등록에 실패했습니다.'); renderQuota(); });
+  }
+}
+
+/* ==========================================================================
    13. 설정 / 백업
    ========================================================================== */
 function viewSettings(v) {
@@ -1655,8 +2209,9 @@ function viewSettings(v) {
     fr.onload = function () {
       var data;
       try { data = JSON.parse(fr.result); } catch (err) { toast('JSON 파일을 읽을 수 없습니다', 'err'); return; }
-      if (!data || (!Array.isArray(data.channels) && !Array.isArray(data.videos))) { toast('올바른 백업 파일이 아닙니다', 'err'); return; }
-      if (!confirm('현재 데이터를 모두 지우고 가져올까요?\n채널 ' + (data.channels || []).length + '개 · 영상 ' + (data.videos || []).length + '개')) return;
+      if (!data || (!Array.isArray(data.channels) && !Array.isArray(data.videos) && !data.myChannel)) { toast('올바른 백업 파일이 아닙니다', 'err'); return; }
+      var myN = data.myChannel && Array.isArray(data.myChannel.videos) ? data.myChannel.videos.length : 0;
+      if (!confirm('현재 데이터를 모두 지우고 가져올까요?\n채널 ' + (data.channels || []).length + '개 · 영상 ' + (data.videos || []).length + '개' + (myN ? ' · 내 채널 영상 ' + myN + '개' : ''))) return;
       var key = state.apiKey;
       if (!data.snapshots && data.snapshotsFlat) data.snapshots = data.snapshotsFlat;
       state = normalize(data);
@@ -1710,7 +2265,13 @@ window.__CCT__ = {
   ui: ui, render: render, velocity: velocity, analyzeTitles: analyzeTitles,
   parseChannelInput: parseChannelInput, isoToSec: isoToSec, heatmapData: heatmapData,
   estimateCost: estimateCost, apiErrorMessage: apiErrorMessage, normalize: normalize,
-  fmtNum: fmtNum, ptToday: ptToday, RULES: RULES, API: API, LS_KEY: LS_KEY
+  fmtNum: fmtNum, ptToday: ptToday, RULES: RULES, API: API, LS_KEY: LS_KEY,
+  /* 내 채널 */
+  registerMyChannel: registerMyChannel, collectMyVideos: collectMyVideos, refreshMyChannel: refreshMyChannel,
+  estimateMyCost: estimateMyCost, parseCsvText: parseCsvText, mapStudioHeaders: mapStudioHeaders,
+  importStudioCsv: importStudioCsv, manualMatch: manualMatch, buildAnalysisCsv: buildAnalysisCsv,
+  myRows: myRows, myRow: myRow, mySummary: mySummary, myInsights: myInsights, kstParts: kstParts, hasEmoji: hasEmoji,
+  STUDIO_COLS: STUDIO_COLS, AI_PROMPTS: AI_PROMPTS, MY: MY, defaultMy: defaultMy
 };
 </script>
 </body>

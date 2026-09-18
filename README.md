@@ -9,7 +9,7 @@
 |---|---|---|---|
 | [`ranking-shorts-source-manager/`](./ranking-shorts-source-manager/) | 🎬 랭킹 쇼츠 · 영상 소스 수집 매니저 | 랭킹 쇼츠용 클립을 여러 플랫폼에서 찾고, 후보를 기록하고, 1~5위를 배치하는 도구 | `index.html` 더블클릭 (설치·서버 불필요) |
 | [`feed-sorter/`](./feed-sorter/) | 🔢 Feed Sorter (개인용) | TikTok·Instagram 피드를 조회수·좋아요·댓글·날짜순으로 재정렬하고 썸네일에 스탯을 표시하는 크롬 확장 | `chrome://extensions` → 개발자 모드 → 압축해제된 확장 프로그램 로드 |
-| [`competitor-tracker/`](./competitor-tracker/) | 📈 경쟁 채널 트래커 | 경쟁 쇼츠 채널의 조회수 스냅샷을 쌓아 급상승 영상·제목 패턴·업로드 시간대를 분석 | `tracker.html` 더블클릭 (YouTube API 키 필요) |
+| [`competitor-tracker/`](./competitor-tracker/) | 📈 경쟁 채널 트래커 | 경쟁 쇼츠 채널의 조회수 스냅샷을 쌓아 급상승 영상·제목 패턴·업로드 시간대를 분석. **내 채널** 탭에서 스튜디오 CSV 를 병합해 AI 분석용 CSV 내보내기 | `tracker.html` 더블클릭 (YouTube API 키 필요) |
 | [`sleep-source-generator/`](./sleep-source-generator/) | 🌌 소스 생성기 | 수면 주파수 영상용 무한 루프 영상(webm)과 주파수 음원(wav)을 따로 생성 | `source-gen.html` 더블클릭 (Chrome/Edge) |
 
 ## 📖 사용 가이드
