@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Feed Sorter (개인용)",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "TikTok·Instagram 피드를 조회수·좋아요·댓글·날짜순으로 재정렬하고 썸네일에 스탯을 표시하는 개인용 리서치 도구입니다.",
   "minimum_chrome_version": "102",
   "permissions": [

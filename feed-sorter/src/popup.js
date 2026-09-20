@@ -10,6 +10,7 @@ const DEFAULTS = {
   showBadge: true,
   showTier: true,
   showDate: false,
+  showExactTime: true,
   showDownload: true,
   showTags: true,
   byDomain: {}
@@ -84,6 +85,7 @@ function syncInputs() {
   $('#showBadge').checked = !!settings.showBadge;
   $('#showTier').checked = !!settings.showTier;
   $('#showDate').checked = !!settings.showDate;
+  $('#showExactTime').checked = !!settings.showExactTime;
   $('#showDownload').checked = !!settings.showDownload;
   $('#showTags').checked = !!settings.showTags;
 }
@@ -91,6 +93,8 @@ function syncInputs() {
 /* ------------------------------ 이벤트 ------------------------------ */
 function bind() {
   syncInputs();
+  /* 툴팁에 쓰이는 시간대 = 이 브라우저/OS 의 시간대. 한국이면 Asia/Seoul */
+  try { $('#tzName').textContent = '(' + (Intl.DateTimeFormat().resolvedOptions().timeZone || '내 시간대') + ')'; } catch (e) { /* noop */ }
 
   document.querySelectorAll('.sort').forEach(function (btn) {
     btn.addEventListener('click', function () {
@@ -106,7 +110,8 @@ function bind() {
   $('#minViews').addEventListener('keydown', function (e) { if (e.key === 'Enter') applyMin(); });
 
   [['showBadge', 'showBadge'], ['showTier', 'showTier'],
-   ['showDate', 'showDate'], ['showDownload', 'showDownload'], ['showTags', 'showTags']].forEach(function (p) {
+   ['showDate', 'showDate'], ['showExactTime', 'showExactTime'],
+   ['showDownload', 'showDownload'], ['showTags', 'showTags']].forEach(function (p) {
     $('#' + p[0]).addEventListener('change', function (e) {
       const patch = {}; patch[p[1]] = e.target.checked; save(patch);
     });

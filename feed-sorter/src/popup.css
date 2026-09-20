@@ -54,6 +54,7 @@ input[type=number]:focus{border-color:var(--accent)}
      border-radius:5px;margin-left:4px;vertical-align:middle}
 .tag.gold{background:rgba(255,200,61,.18);color:var(--gold)}
 .tag.green{background:rgba(53,199,89,.18);color:var(--green)}
+.tz{font-style:normal;font-size:10.5px;color:var(--muted,#8b98a8);margin-left:4px}
 
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px}
 .stat{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:9px;text-align:center}

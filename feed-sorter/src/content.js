@@ -29,6 +29,7 @@
     showBadge: true,
     showTier: true,
     showDate: false,
+    showExactTime: true,  // 커서를 올리면 정확한 업로드 시각(내 시간대) 툴팁
     showDownload: true,
     showTags: true,
     byDomain: {}          // { 'tiktok.com': 'views', 'instagram.com': 'original' }
@@ -313,7 +314,8 @@
     const tags = Array.isArray(item.tags) ? item.tags : [];
     if (!S.settings.showTags || !tags.length) { if (box) box.remove(); return; }
     const sig = tags.join('|');
-    if (box && box.dataset.sig === sig) return;          /* 변화 없으면 다시 그리지 않음 */
+    /* 변화 없으면 다시 그리지 않음. 사용자가 +N 으로 펼쳐 둔 상태('#all')도 유지 */
+    if (box && (box.dataset.sig === sig || box.dataset.sig === sig + '#all')) return;
     if (!box) { box = document.createElement('div'); box.className = 'fs-tags'; host.appendChild(box); }
     box.dataset.sig = sig;
     box.innerHTML = '';
@@ -334,6 +336,55 @@
     }
   }
 
+  /* ── 업로드 시각 툴팁: 카드에 커서를 올리면 정확한 게시 시각을 내 시간대로 ──
+     플랫폼이 보여주는 "3개월 전" 같은 상대 표기 대신, 응답에 들어 있는 UTC
+     타임스탬프를 브라우저 시간대(예: Asia/Seoul)로 바꿔 초 단위까지 보여줍니다.
+     툴팁은 문서에 하나만 두고, 카드마다 mouseenter/leave 핸들러를 한 번씩만 붙입니다. */
+  let tipEl = null;
+  function tipNode() {
+    if (tipEl && tipEl.isConnected) return tipEl;
+    tipEl = document.createElement('div');
+    tipEl.className = 'fs-tip';
+    tipEl.setAttribute('role', 'tooltip');
+    (document.body || document.documentElement).appendChild(tipEl);
+    return tipEl;
+  }
+  function hideTip() { if (tipEl) tipEl.classList.remove('fs-tip-on'); }
+  function placeTip(x, y) {
+    const el = tipNode();
+    const off = C.TIP_OFFSET, vw = window.innerWidth, vh = window.innerHeight;
+    const w = el.offsetWidth || 220, h = el.offsetHeight || 44;
+    let left = x + off.x, top = y + off.y;
+    if (left + w > vw - 8) left = Math.max(8, x - off.x - w);   /* 오른쪽 벽이면 커서 왼쪽으로 */
+    if (top + h > vh - 8) top = Math.max(8, y - off.y - h);     /* 아래 벽이면 커서 위로 */
+    el.style.left = left + 'px'; el.style.top = top + 'px';
+  }
+  function showTip(cell, x, y) {
+    if (!S.settings.showExactTime) return hideTip();
+    const meta = S.meta.get(cell);
+    const item = meta && S.items.get(meta.key);
+    const t = item && C.fmtExact(item.createTime);
+    if (!t) return hideTip();
+    const el = tipNode();
+    el.innerHTML = '';
+    const l1 = document.createElement('div'); l1.className = 'fs-tip-main';
+    l1.textContent = '🕑 ' + t.date + ' (' + t.weekday + ') ' + t.time;
+    const l2 = document.createElement('div'); l2.className = 'fs-tip-sub';
+    l2.textContent = (t.tz || '내 시간대') + (t.offset ? ' · ' + t.offset : '') + (t.age ? ' · ' + t.age : '');
+    el.appendChild(l1); el.appendChild(l2);
+    el.classList.add('fs-tip-on');
+    placeTip(x, y);
+  }
+  function ensureHover(cell) {
+    if (cell.dataset.fsHover) return;
+    cell.dataset.fsHover = '1';
+    cell.addEventListener('mouseenter', function (ev) { showTip(cell, ev.clientX, ev.clientY); });
+    cell.addEventListener('mousemove', function (ev) {
+      if (tipEl && tipEl.classList.contains('fs-tip-on')) placeTip(ev.clientX, ev.clientY);
+    });
+    cell.addEventListener('mouseleave', hideTip);
+  }
+
   /* 테두리는 썸네일(host)에 그립니다. 카드 전체에 그리면 아래 캡션 위를 덮습니다. */
   function applyTier(host, item) {
     host.classList.remove('fs-gold', 'fs-green');
@@ -352,6 +403,7 @@
       ensureBadge(host, item);
       ensureDownload(host, item);
       ensureTags(host, item);
+      ensureHover(cell);
       applyTier(host, item);
       const min = Number(S.settings.minViews) || 0;
       const v = Number(item.views);
@@ -538,7 +590,12 @@
   const mo = new MutationObserver(function (muts) {
     if (S.reordering) return;
     for (let i = 0; i < muts.length; i++) {
-      if (muts[i].addedNodes && muts[i].addedNodes.length) { schedule(); return; }
+      const m = muts[i];
+      if (!m.addedNodes || !m.addedNodes.length) continue;
+      /* 우리가 그리는 툴팁의 변화는 무시 — 호버마다 재스캔이 돌면 낭비이고,
+         펼쳐 둔 해시태그(+N)가 다시 접히는 부작용이 납니다 */
+      if (tipEl && (m.target === tipEl || tipEl.contains(m.target) || (m.addedNodes.length === 1 && m.addedNodes[0] === tipEl))) continue;
+      schedule(); return;
     }
   });
 
@@ -553,6 +610,7 @@
   }
 
   function resetForNavigation() {
+    hideTip();
     S.cells.clear();
     S.order = 0;
     /* 수집한 데이터(S.items)는 세션 내내 유지합니다 — CSV 내보내기용 */
@@ -623,6 +681,7 @@
       if (!S.settings.showBadge) document.querySelectorAll('.fs-badge').forEach(function (el) { el.remove(); });
       if (!S.settings.showDownload) document.querySelectorAll('.fs-dl').forEach(function (el) { el.remove(); });
       if (!S.settings.showTags) document.querySelectorAll('.fs-tags').forEach(function (el) { el.remove(); });
+      if (!S.settings.showExactTime) hideTip();
     } catch (e) { /* noop */ }
     schedule();
   }
