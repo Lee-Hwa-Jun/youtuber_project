@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>영상 다운로더 · yt-dlp 리모컨</title>
+<style>
+:root{
+  --bg:#0e1116; --panel:#161b22; --panel2:#1c232c; --panel3:#232c37;
+  --line:#2b3440; --line2:#3a4553;
+  --text:#e6edf3; --muted:#93a1b1; --dim:#6e7d8e;
+  --accent:#2ea87a; --accent-ink:#fff;
+  --yt:#ff4d5e; --ig:#e1306c; --tt:#25f4ee;
+  --good:#0ca30c; --warning:#fab219; --critical:#d03b3b;
+  --radius:13px; --shadow:0 10px 30px rgba(0,0,0,.4);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--text);
+  font:14px/1.55 "Pretendard","Apple SD Gothic Neo","Malgun Gothic",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent)}
+code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"D2Coding",monospace}
+.app{max-width:980px;margin:0 auto;padding:0 18px 60px;padding-top:env(safe-area-inset-top,0px)}
+.topbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:15px 0 12px;border-bottom:1px solid var(--line);margin-bottom:16px}
+.brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:17px;letter-spacing:-.3px}
+.brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(46,168,122,.2)}
+.brand small{display:block;font-weight:500;font-size:11px;color:var(--dim);letter-spacing:0}
+.btn{background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:8px 13px;border-radius:10px;cursor:pointer;white-space:nowrap;transition:.14s;font-size:13px;font-weight:600}
+.btn:hover{background:var(--panel3);border-color:var(--line2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent}
+.btn.danger{color:#ff7b7b}
+.btn.danger:hover{background:rgba(208,59,59,.14);border-color:var(--critical)}
+.btn.sm{padding:5px 9px;font-size:12px;border-radius:8px}
+.btn.xs{padding:3px 8px;font-size:11px;border-radius:7px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.input,select,textarea{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 11px;width:100%;outline:none}
+.input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(46,168,122,.16)}
+textarea{resize:vertical;min-height:96px;line-height:1.5}
+label.f{display:block;font-size:12px;color:var(--muted);margin:0 0 5px;font-weight:600}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:14px}
+.card h2{margin:0 0 4px;font-size:16px;letter-spacing:-.3px;display:flex;align-items:center;gap:9px}
+.card h2 .step{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:800}
+.card h2 .sub{font-weight:500;font-size:12px;color:var(--dim);margin-left:2px}
+.card p.lead{margin:0 0 12px;font-size:12.5px;color:var(--muted)}
+.tip{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:10px;padding:11px 13px;font-size:12.5px;color:var(--muted);margin-bottom:14px}
+.tip b{color:var(--text)} .tip.warn{border-left-color:var(--warning)} .tip.crit{border-left-color:var(--critical)}
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:20px;border:1px solid transparent;white-space:nowrap}
+.b-gray{background:var(--panel3);color:var(--muted);border-color:var(--line)}
+.b-yt{background:rgba(255,77,94,.16);color:var(--yt);border-color:rgba(255,77,94,.45)}
+.b-ig{background:rgba(225,48,108,.16);color:#ff7aa8;border-color:rgba(225,48,108,.45)}
+.b-tt{background:rgba(37,244,238,.14);color:var(--tt);border-color:rgba(37,244,238,.4)}
+.b-bad{background:rgba(208,59,59,.16);color:#ff8a8a;border-color:rgba(208,59,59,.45)}
+.b-ok{background:rgba(46,168,122,.16);color:#5fd3a3;border-color:rgba(46,168,122,.45)}
+pre.cmd{background:#0a0d12;border:1px solid var(--line);border-radius:10px;padding:12px 13px;margin:0;font-size:12.5px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:#d7e2ee;position:relative}
+pre.cmd .k{color:#7ee2b8} pre.cmd .u{color:#9cc4ff}
+.os{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.os button{background:var(--panel2);border:none;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700;color:var(--muted)}
+.os button.on{background:var(--accent);color:#fff}
+.links{display:flex;flex-direction:column;gap:7px}
+.lk{display:flex;gap:10px;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.lk .u{flex:1;min-width:0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lk .id{font-size:11px;color:var(--dim);font-family:ui-monospace,Menlo,Consolas,monospace}
+.empty{border:1.5px dashed var(--line2);border-radius:var(--radius);padding:26px 20px;text-align:center;background:var(--panel)}
+.empty .ico{font-size:32px;line-height:1;margin-bottom:8px}
+.empty h4{margin:0 0 6px;font-size:15px}
+.empty p{margin:0 auto;max-width:560px;color:var(--muted);font-size:13px}
+.empty ol{text-align:left;max-width:560px;margin:10px auto 0;color:var(--muted);font-size:13px;padding-left:20px}
+.sw{display:flex;align-items:center;gap:9px;padding:5px 0;cursor:pointer;font-size:13px}
+.sw input{accent-color:var(--accent);width:15px;height:15px;cursor:pointer;flex:0 0 auto}
+table.hist{width:100%;border-collapse:collapse;font-size:12.5px}
+table.hist th{text-align:left;padding:8px 9px;background:var(--panel2);color:var(--muted);font-size:11.5px;font-weight:700;border-bottom:1px solid var(--line);white-space:nowrap}
+table.hist td{padding:8px 9px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.hist tr:last-child td{border-bottom:none}
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.faq>b{display:block;margin:12px 0 3px;font-size:13px}
+.faq>p{margin:0;color:var(--muted);font-size:12.5px}
+.faq p b{color:var(--text)}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;z-index:200;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+.toast{background:var(--panel3);border:1px solid var(--line2);padding:10px 16px;border-radius:12px;box-shadow:var(--shadow);font-size:13px;font-weight:600;animation:tin .25s;max-width:90vw}
+.toast.ok{border-color:var(--good)} .toast.err{border-color:var(--critical)}
+@keyframes tin{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.foot-note{margin-top:28px;padding-top:14px;border-top:1px solid var(--line);color:var(--dim);font-size:11.5px;text-align:center}
+@media(max-width:720px){.app{padding:0 12px 50px}.grid2,.grid3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><span class="dot"></span><span>영상 다운로더<small>유튜브 · 인스타그램 · 틱톡 링크 → 원본 화질 저장 (yt-dlp 리모컨)</small></span></div>
+    <div class="row"><span class="dim" style="font-size:12px">내 컴퓨터:</span><div class="os" id="osSel"><button data-os="win">Windows</button><button data-os="mac">Mac</button></div></div>
+  </header>
+  <main id="view"></main>
+  <div class="foot-note">이 파일은 서버에 아무것도 보내지 않습니다 · 링크 목록은 이 브라우저(localStorage)에만 저장됩니다</div>
+</div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* ============================================================================
+   영상 다운로더 — yt-dlp 리모컨 (단일 파일 / 외부 라이브러리 없음)
+   브라우저는 CORS 와 서명 보호 때문에 영상을 직접 받을 수 없습니다.
+   이 페이지는 링크를 인식하고 옵션을 골라 yt-dlp 명령/스크립트를 만들어 줍니다.
+   ============================================================================ */
+var LS_KEY = 'vdl_v1';
+var DEFAULT_TEMPLATE = '%(title).100s [%(id)s].%(ext)s';
+
+var PLAT = {
+  youtube:   { name: 'YouTube',   cls: 'b-yt', emo: '▶️' },
+  instagram: { name: 'Instagram', cls: 'b-ig', emo: '📸' },
+  tiktok:    { name: 'TikTok',    cls: 'b-tt', emo: '🎵' }
+};
+/* yt-dlp 포맷 선택자. bv*=최고 영상, ba=최고 오디오, /b=합쳐진 단일 파일 폴백 */
+var QUALITY = {
+  best:  { name: '최고 화질 (원본)',  args: ['-f', 'bv*+ba/b'] },
+  q2160: { name: '4K 까지 (2160p)',   args: ['-f', 'bv*[height<=2160]+ba/b[height<=2160]'] },
+  q1080: { name: '1080p 까지',        args: ['-f', 'bv*[height<=1080]+ba/b[height<=1080]'] },
+  q720:  { name: '720p 까지',         args: ['-f', 'bv*[height<=720]+ba/b[height<=720]'] },
+  audio: { name: '오디오만 (mp3)',    args: ['-x', '--audio-format', 'mp3', '--audio-quality', '0'] }
+};
+var COOKIES = [['none', '사용 안 함'], ['chrome', 'Chrome'], ['edge', 'Edge'], ['firefox', 'Firefox'], ['brave', 'Brave'], ['safari', 'Safari (Mac)']];
+var INSTALL = {
+  win: { title: 'Windows', open: 'Win + X → "터미널" (또는 시작 메뉴에서 PowerShell)', steps: [
+    ['yt-dlp 설치', 'winget install yt-dlp.yt-dlp'],
+    ['ffmpeg 설치 — 영상+오디오를 합치는 데 필요', 'winget install Gyan.FFmpeg'],
+    ['설치 확인 (버전이 나오면 성공)', 'yt-dlp --version'] ] },
+  mac: { title: 'Mac', open: 'Spotlight(⌘ + Space) → "터미널"', steps: [
+    ['Homebrew 가 없으면 먼저 설치', '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'],
+    ['yt-dlp + ffmpeg 설치', 'brew install yt-dlp ffmpeg'],
+    ['설치 확인 (버전이 나오면 성공)', 'yt-dlp --version'] ] }
+};
+
+function $(s, r) { return (r || document).querySelector(s); }
+function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
+function on(s, ev, fn, r) { $$(s, r).forEach(function (n) { n.addEventListener(ev, fn); }); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function toast(msg, kind) {
+  var box = $('#toast'), t = document.createElement('div');
+  t.className = 'toast ' + (kind || ''); t.textContent = msg; box.appendChild(t);
+  setTimeout(function () { t.style.transition = '.3s'; t.style.opacity = '0'; setTimeout(function () { t.remove(); }, 320); }, 2800);
+}
+function copyText(txt, okMsg) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(function () { toast(okMsg || '복사했습니다', 'ok'); }, function () { prompt('아래 내용을 복사하세요', txt); });
+  } else prompt('아래 내용을 복사하세요', txt);
+}
+function download(filename, content, mime) {
+  var blob = new Blob([content], { type: mime || 'application/octet-stream' });
+  var url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+  setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 800);
+}
+function stamp() { var d = new Date(); return d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + '-' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0'); }
+function fmtTime(ms) { var d = new Date(ms); return d.getFullYear() + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.' + String(d.getDate()).padStart(2, '0') + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+function guessOs() { var p = (navigator.platform || '') + ' ' + (navigator.userAgent || ''); return /Mac|iPhone|iPad/i.test(p) ? 'mac' : 'win'; }
+
+/* ==========================================================================
+   1. 플랫폼 인식 — 링크 한 줄 → { ok, platform, id, kind, url }
+   ========================================================================== */
+var YT_ID = /^[A-Za-z0-9_-]{11}$/;
+function detect(raw) {
+  var s = String(raw || '').trim();
+  if (!s) return null;
+  if (!/^https?:\/\//i.test(s)) s = 'https://' + s.replace(/^\/+/, '');
+  var u; try { u = new URL(s); } catch (e) { return { ok: false, raw: raw, reason: '주소 형식이 아닙니다' }; }
+  var h = u.hostname.toLowerCase().replace(/^(www|m|mobile)\./, '');
+
+  if (/(^|\.)youtube\.com$|^youtu\.be$|(^|\.)youtube-nocookie\.com$/.test(h)) {
+    var id = null, kind = 'video', m;
+    if (h === 'youtu.be') id = u.pathname.split('/')[1] || '';
+    else if (u.searchParams.get('v')) id = u.searchParams.get('v');
+    else if ((m = u.pathname.match(/\/(shorts|live|embed|v)\/([A-Za-z0-9_-]{11})/))) { id = m[2]; kind = m[1] === 'shorts' ? 'shorts' : 'video'; }
+    if (!id || !YT_ID.test(id)) {
+      if (/\/playlist/.test(u.pathname) || (u.searchParams.get('list') && !id)) return { ok: false, raw: raw, platform: 'youtube', reason: '재생목록 링크입니다 — 영상 하나의 링크를 넣어주세요' };
+      if (/^\/(@|channel\/|c\/|user\/)/.test(u.pathname)) return { ok: false, raw: raw, platform: 'youtube', reason: '채널 링크입니다 — 영상 링크를 넣어주세요' };
+      return { ok: false, raw: raw, platform: 'youtube', reason: '영상 ID 를 찾지 못했습니다' };
+    }
+    return { ok: true, raw: raw, platform: 'youtube', id: id, kind: kind, url: kind === 'shorts' ? 'https://www.youtube.com/shorts/' + id : 'https://www.youtube.com/watch?v=' + id };
+  }
+  if (/(^|\.)instagram\.com$/.test(h)) {
+    var m2 = u.pathname.match(/\/(reel|reels|p|tv)\/([A-Za-z0-9_-]{5,})/);
+    if (!m2) return { ok: false, raw: raw, platform: 'instagram', reason: '게시물 링크(/reel/… 또는 /p/…)가 아닙니다' };
+    var type = m2[1] === 'reels' ? 'reel' : m2[1];
+    return { ok: true, raw: raw, platform: 'instagram', id: m2[2], kind: type, url: 'https://www.instagram.com/' + type + '/' + m2[2] + '/', needsLogin: true };
+  }
+  if (/(^|\.)tiktok\.com$/.test(h)) {
+    var m3 = u.pathname.match(/\/(video|photo)\/(\d+)/);
+    if (m3) {
+      var user = (u.pathname.match(/\/(@[\w.\-]+)\//) || [])[1];
+      return { ok: true, raw: raw, platform: 'tiktok', id: m3[2], kind: m3[1], photo: m3[1] === 'photo',
+               url: user ? 'https://www.tiktok.com/' + user + '/' + m3[1] + '/' + m3[2] : s.split('?')[0] };
+    }
+    if (/^(vm|vt)\.tiktok\.com$/.test(h) || /^\/t\/[A-Za-z0-9]+/.test(u.pathname) || /^\/[A-Za-z0-9]{6,12}\/?$/.test(u.pathname)) {
+      return { ok: true, raw: raw, platform: 'tiktok', id: u.pathname.replace(/\//g, '') || '-', kind: 'short', shortLink: true, url: s.split('?')[0] };
+    }
+    return { ok: false, raw: raw, platform: 'tiktok', reason: '영상 링크(/video/…)가 아닙니다' };
+  }
+  return { ok: false, raw: raw, reason: '지원하지 않는 사이트입니다 (유튜브·인스타그램·틱톡만)' };
+}
+function parseLinks(text) {
+  var out = [], seen = {};
+  String(text || '').split(/[\n\r,\s]+/).forEach(function (line) {
+    var r = detect(line); if (!r) return;
+    var key = r.ok ? r.url : r.raw;
+    if (seen[key]) return; seen[key] = 1;
+    out.push(r);
+  });
+  return out;
+}
+
+/* ==========================================================================
+   2. 명령 · 스크립트 생성
+   ========================================================================== */
+function buildArgs(o) {
+  var a = [];
+  if (o.quality === 'audio') a = a.concat(QUALITY.audio.args);
+  else a = a.concat((QUALITY[o.quality] || QUALITY.best).args, ['-S', 'res,ext:mp4:m4a', '--merge-output-format', 'mp4']);
+  a.push('--no-playlist');
+  if (o.cookies && o.cookies !== 'none') a.push('--cookies-from-browser', o.cookies);
+  if (o.subs) a.push('--write-subs', '--sub-langs', 'ko,en', '--embed-subs');
+  if (o.thumb) a.push('--embed-thumbnail');
+  if (o.meta) a.push('--embed-metadata');
+  if (o.folder) a.push('-P', o.folder);
+  a.push('-o', o.template || DEFAULT_TEMPLATE);
+  if (o.os === 'win') a.push('--windows-filenames');
+  return a;
+}
+/* 공백·특수문자가 있으면 큰따옴표. Windows(cmd/PowerShell) 는 "" 로, Mac 은 \" 로 내부 따옴표 이스케이프 */
+function shQuote(x, os) {
+  x = String(x);
+  if (/^[A-Za-z0-9_\-.:=,+\/@~]+$/.test(x)) return x;
+  return '"' + x.replace(/"/g, os === 'win' ? '""' : '\\"') + '"';
+}
+function buildCommand(links, o) {
+  return ['yt-dlp'].concat(buildArgs(o).map(function (x) { return shQuote(x, o.os); }),
+                           links.map(function (l) { return shQuote(l.url, o.os); })).join(' ');
+}
+/* 더블클릭용 스크립트. 배치 파일 안에서는 % 를 %% 로 써야 합니다 (출력 템플릿의 %(title)s 등) */
+function buildScript(links, o) {
+  var cmd = buildCommand(links, o);
+  if (o.os === 'win') {
+    return ['@echo off', 'chcp 65001 >nul', 'title Video Downloader (yt-dlp)', 'echo Downloading ' + links.length + ' link(s)...',
+            o.update ? 'yt-dlp -U' : 'rem (auto-update off)', cmd.replace(/%/g, '%%'), 'echo.', 'echo Done. You can close this window.', 'pause'].join('\r\n') + '\r\n';
+  }
+  return ['#!/bin/bash', 'echo "Downloading ' + links.length + ' link(s)..."', o.update ? 'yt-dlp -U' : '# (auto-update off)', cmd, 'echo', 'echo "Done."', 'read -p "Press Enter to close "'].join('\n') + '\n';
+}
+function scriptName(o) { return 'download-' + stamp() + (o.os === 'win' ? '.bat' : '.sh'); }
+
+/* ==========================================================================
+   3. 상태 · 저장
+   ========================================================================== */
+var state = null;
+function defaults() {
+  return { v: 1, os: guessOs(), installed: false, quality: 'best', cookies: 'none', subs: false, thumb: false, meta: true,
+           folder: '', template: DEFAULT_TEMPLATE, update: true, text: '', history: [] };
+}
+function load() {
+  try { var raw = localStorage.getItem(LS_KEY); if (!raw) return defaults();
+    var s = JSON.parse(raw); if (!s || typeof s !== 'object') return defaults();
+    var d = defaults(); Object.keys(d).forEach(function (k) { if (s[k] === undefined) s[k] = d[k]; });
+    if (!Array.isArray(s.history)) s.history = [];
+    if (s.os !== 'win' && s.os !== 'mac') s.os = guessOs();
+    return s;
+  } catch (e) { return defaults(); }
+}
+function save() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* noop */ } }
+function opts() { return { os: state.os, quality: state.quality, cookies: state.cookies, subs: state.subs, thumb: state.thumb, meta: state.meta, folder: state.folder.trim(), template: state.template.trim() || DEFAULT_TEMPLATE, update: state.update }; }
+function pushHistory(links, how) {
+  var now = Date.now();
+  links.forEach(function (l) {
+    state.history = state.history.filter(function (h) { return h.url !== l.url; });
+    state.history.unshift({ t: now, url: l.url, platform: l.platform, id: l.id, quality: state.quality, how: how });
+  });
+  state.history = state.history.slice(0, 200); save();
+}
+
+/* ==========================================================================
+   4. 화면
+   ========================================================================== */
+function render() {
+  $$('#osSel button').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-os') === state.os); });
+  var links = parseLinks(state.text), good = links.filter(function (l) { return l.ok; }), bad = links.filter(function (l) { return !l.ok; });
+  var o = opts(), cmd = good.length ? buildCommand(good, o) : '';
+  var hasIg = good.some(function (l) { return l.platform === 'instagram'; });
+  var hasPhoto = good.some(function (l) { return l.photo; });
+  var inst = INSTALL[state.os];
+
+  var v = $('#view');
+  v.innerHTML =
+  '<div class="tip">ℹ️ <b>왜 이 방식인가요?</b> 브라우저는 보안(CORS) 때문에 유튜브·인스타·틱톡 서버에 직접 요청할 수 없고, 유튜브 고화질은 영상·오디오가 분리되어 있어 합치는 프로그램이 필요합니다. ' +
+    '그래서 실제 다운로드는 오픈소스 표준 도구 <b>yt-dlp</b> 가 하고, 이 페이지는 링크를 인식해 <b>더블클릭 한 번으로 실행되는 스크립트</b>를 만들어 줍니다. 세 플랫폼 모두 원본 화질로 받아 자동으로 합쳐집니다.</div>' +
+
+  /* ── 1. 설치 ── */
+  '<div class="card"><h2><span class="step">1</span>yt-dlp 설치 <span class="sub">처음 한 번만 · ' + inst.title + '</span></h2>' +
+    '<details' + (state.installed ? '' : ' open') + '><summary class="dim" style="cursor:pointer;font-size:12.5px;margin-bottom:10px">' + (state.installed ? '설치 완료로 표시됨 — 펼쳐서 다시 보기' : inst.open + ' 를 열고 아래 명령을 순서대로 붙여넣어 실행') + '</summary>' +
+    inst.steps.map(function (st, i) {
+      return '<div style="margin-bottom:10px"><div class="dim" style="font-size:12px;margin-bottom:4px">' + (i + 1) + '. ' + esc(st[0]) + '</div>' +
+        '<div class="row" style="flex-wrap:nowrap"><pre class="cmd" style="flex:1">' + esc(st[1]) + '</pre><button class="btn sm" data-copy="' + esc(st[1]) + '">📋</button></div></div>';
+    }).join('') +
+    '<label class="sw"><input type="checkbox" id="installed"' + (state.installed ? ' checked' : '') + '><span>설치했어요 (이 안내 접기)</span></label>' +
+    '<p class="dim" style="font-size:12px;margin:8px 0 0">유튜브가 바뀌면 다운로드가 깨질 수 있습니다. 그때는 <code>yt-dlp -U</code> 로 업데이트하세요 (아래 스크립트는 기본으로 실행 전 자동 업데이트합니다).</p>' +
+    '</details></div>' +
+
+  /* ── 2. 링크 ── */
+  '<div class="card"><h2><span class="step">2</span>링크 붙이기 <span class="sub">여러 개면 줄바꿈으로 · 플랫폼 자동 인식</span></h2>' +
+    '<textarea id="links" placeholder="https://www.youtube.com/watch?v=…&#10;https://www.instagram.com/reel/…&#10;https://www.tiktok.com/@…/video/…&#10;https://vm.tiktok.com/…">' + esc(state.text) + '</textarea>' +
+    (links.length ? '<div class="row" style="margin:10px 0 8px;justify-content:space-between"><span class="dim" style="font-size:12px">인식 <b style="color:var(--text)">' + good.length + '개</b>' + (bad.length ? ' · <span style="color:#ff8a8a">문제 ' + bad.length + '개</span>' : '') + '</span>' +
+      '<button class="btn xs ghost" id="clearLinks">목록 비우기</button></div>' +
+      '<div class="links">' + links.map(function (l) {
+        if (!l.ok) return '<div class="lk"><span class="badge b-bad">✕ ' + (l.platform ? PLAT[l.platform].name : '인식 불가') + '</span><span class="u" title="' + esc(l.raw) + '">' + esc(l.raw) + '</span><span class="id" style="color:#ff8a8a">' + esc(l.reason) + '</span></div>';
+        var P = PLAT[l.platform];
+        return '<div class="lk"><span class="badge ' + P.cls + '">' + P.emo + ' ' + P.name + (l.kind === 'shorts' ? ' Shorts' : l.kind === 'reel' ? ' Reel' : l.photo ? ' 사진' : l.shortLink ? ' 단축링크' : '') + '</span>' +
+          '<span class="u" title="' + esc(l.url) + '">' + esc(l.url) + '</span><span class="id">' + esc(l.id) + '</span>' +
+          '<a class="btn xs" href="' + esc(l.url) + '" target="_blank" rel="noopener" style="text-decoration:none" title="브라우저에서 열기">↗</a></div>';
+      }).join('') + '</div>' : '<p class="dim" style="font-size:12px;margin:10px 0 0">유튜브 watch / youtu.be / Shorts, 인스타그램 Reel / 게시물, 틱톡 영상 / vm.tiktok 단축링크를 인식합니다.</p>') +
+    (hasPhoto ? '<div class="tip warn" style="margin:10px 0 0">📷 틱톡 <b>사진 게시물</b>은 영상이 아니라 이미지 슬라이드입니다. yt-dlp 가 이미지로 받을 수 있지만 영상 파일은 나오지 않습니다.</div>' : '') +
+  '</div>' +
+
+  /* ── 3. 옵션 ── */
+  '<div class="card"><h2><span class="step">3</span>옵션</h2>' +
+    '<div class="grid3" style="margin-bottom:12px">' +
+      '<div><label class="f">화질</label><select id="quality">' + Object.keys(QUALITY).map(function (k) { return '<option value="' + k + '"' + (state.quality === k ? ' selected' : '') + '>' + QUALITY[k].name + '</option>'; }).join('') + '</select></div>' +
+      '<div><label class="f">로그인 쿠키 가져올 브라우저</label><select id="cookies">' + COOKIES.map(function (c) { return '<option value="' + c[0] + '"' + (state.cookies === c[0] ? ' selected' : '') + '>' + c[1] + '</option>'; }).join('') + '</select></div>' +
+      '<div><label class="f">저장 폴더 <span class="dim">(비우면 스크립트가 있는 폴더)</span></label><input class="input" id="folder" value="' + esc(state.folder) + '" placeholder="' + (state.os === 'win' ? 'C:\\Users\\me\\Videos\\clips' : '~/Movies/clips') + '"></div>' +
+    '</div>' +
+    (hasIg && state.cookies === 'none' ? '<div class="tip warn" style="margin:0 0 12px">🔐 <b>인스타그램은 로그인 상태가 필요합니다.</b> 위에서 인스타에 로그인해 둔 브라우저를 고르면 그 로그인 쿠키를 yt-dlp 가 읽어 씁니다. 안 고르면 "login required" 로 실패합니다.</div>' : '') +
+    '<div class="grid2" style="margin-bottom:10px">' +
+      '<div><label class="f">파일명 규칙 <span class="dim">(yt-dlp 템플릿)</span></label><div class="row" style="flex-wrap:nowrap"><input class="input" id="template" value="' + esc(state.template) + '"><button class="btn sm" id="tplReset" title="기본값으로">↺</button></div>' +
+        '<p class="dim" style="font-size:11.5px;margin:5px 0 0">%(title)s 제목 · %(id)s 영상ID · %(uploader)s 채널 · %(upload_date)s 게시일 · %(ext)s 확장자</p></div>' +
+      '<div><label class="f">추가</label>' +
+        '<label class="sw"><input type="checkbox" id="meta"' + (state.meta ? ' checked' : '') + '><span>제목·설명·게시일을 파일 메타데이터에 넣기</span></label>' +
+        '<label class="sw"><input type="checkbox" id="thumb"' + (state.thumb ? ' checked' : '') + '><span>썸네일을 파일에 넣기</span></label>' +
+        '<label class="sw"><input type="checkbox" id="subs"' + (state.subs ? ' checked' : '') + '><span>자막(한/영) 있으면 넣기</span></label>' +
+        '<label class="sw"><input type="checkbox" id="update"' + (state.update ? ' checked' : '') + '><span>실행 전 yt-dlp 자동 업데이트</span></label>' +
+      '</div></div>' +
+  '</div>' +
+
+  /* ── 4. 실행 ── */
+  '<div class="card"><h2><span class="step">4</span>다운로드 실행 <span class="sub">' + inst.title + ' 용</span></h2>' +
+    (good.length ?
+      '<div class="row" style="margin-bottom:10px"><button class="btn primary" id="dlScript">⬇ 다운로드 스크립트 받기 (' + (state.os === 'win' ? '.bat' : '.sh') + ')</button>' +
+        '<button class="btn" id="copyCmd">📋 명령 복사</button><span class="dim" style="font-size:12px">' + good.length + '개 영상 · ' + esc(QUALITY[state.quality].name) + '</span></div>' +
+      (state.os === 'win'
+        ? '<div class="tip" style="margin:0 0 12px"><b>Windows:</b> 받은 <code>.bat</code> 파일을 <b>더블클릭</b>하면 다운로드가 시작됩니다. "Windows 의 PC 보호" 창이 뜨면 <b>추가 정보 → 실행</b>. 영상은 스크립트가 있는 폴더(또는 위에서 정한 폴더)에 저장됩니다.</div>'
+        : '<div class="tip" style="margin:0 0 12px"><b>Mac:</b> 터미널을 열고 <code>sh </code>(sh 와 공백)를 입력한 뒤 받은 <code>.sh</code> 파일을 터미널 창에 <b>드래그</b>하고 Enter. 또는 명령 복사 → 터미널에 붙여넣기.</div>') +
+      '<pre class="cmd" id="cmdPre">' + highlight(cmd) + '</pre>'
+      : '<div class="empty"><div class="ico">⬇</div><h4>링크를 넣으면 여기에 실행 명령이 만들어집니다</h4><p>2번 칸에 링크를 붙이세요. 여러 개를 한 번에 받을 수 있습니다.</p></div>') +
+    '<p class="dim" style="font-size:11.5px;margin:10px 0 0">⚖️ 남의 영상은 <b>리서치·검토용</b>으로만 받으세요. 실제 영상에 쓰려면 원작자 허락이 필요합니다 — 소스 수집 매니저의 라이선스 상태로 관리하세요.</p>' +
+  '</div>' +
+
+  /* ── 5. 최근 ── */
+  '<div class="card"><h2>최근 목록 <span class="sub">' + state.history.length + '개 · 이 브라우저에만 저장</span></h2>' +
+    (state.history.length ?
+      '<div class="row" style="margin-bottom:10px"><button class="btn sm" id="histCsv">⬇ CSV</button><button class="btn sm" id="histReuse">↩ 전부 다시 링크 칸에 넣기</button><button class="btn sm danger" id="histClear">지우기</button></div>' +
+      '<div class="table-wrap"><table class="hist"><thead><tr><th>시각</th><th>플랫폼</th><th>링크</th><th>화질</th><th></th></tr></thead><tbody>' +
+      state.history.slice(0, 50).map(function (h, i) {
+        var P = PLAT[h.platform] || { cls: 'b-gray', name: '?', emo: '' };
+        return '<tr><td class="dim" style="white-space:nowrap">' + fmtTime(h.t) + '</td><td><span class="badge ' + P.cls + '">' + P.emo + ' ' + P.name + '</span></td>' +
+          '<td style="max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><a href="' + esc(h.url) + '" target="_blank" rel="noopener" style="text-decoration:none;color:inherit">' + esc(h.url) + '</a></td>' +
+          '<td class="dim">' + esc((QUALITY[h.quality] || {}).name || h.quality) + '</td><td><button class="btn xs" data-hadd="' + esc(h.url) + '">＋ 링크 칸에</button></td></tr>';
+      }).join('') + '</tbody></table></div>' + (state.history.length > 50 ? '<p class="dim" style="font-size:12px">…외 ' + (state.history.length - 50) + '개 (CSV 에는 전부 들어갑니다)</p>' : '')
+      : '<p class="dim" style="font-size:12.5px;margin:0">명령을 복사하거나 스크립트를 받으면 링크가 여기에 기록됩니다.</p>') +
+  '</div>' +
+
+  /* ── FAQ ── */
+  '<div class="card faq"><h2>문제가 생기면</h2>' +
+    '<b>"yt-dlp 은(는) 내부 또는 외부 명령… 이 아닙니다" / "command not found"</b><p>yt-dlp 가 설치되지 않았거나 터미널을 다시 열지 않았습니다. 1번 설치 후 <b>터미널(또는 .bat)을 새로 열어</b> 다시 실행하세요.</p>' +
+    '<b>"ffmpeg not found" 또는 영상과 소리가 따로 저장됨</b><p>ffmpeg 가 없어서 합치지 못한 것입니다. 1번의 ffmpeg 설치 명령을 실행하세요.</p>' +
+    '<b>"Sign in to confirm you\'re not a bot" / "login required" / 403</b><p>3번에서 <b>로그인 쿠키 브라우저</b>를 고르세요. 그 브라우저에 해당 사이트가 로그인되어 있어야 합니다. 인스타그램은 거의 항상 필요합니다.</p>' +
+    '<b>"Unsupported URL" / "Unable to extract"</b><p>사이트가 바뀌어 yt-dlp 가 따라잡지 못한 상태입니다. <code>yt-dlp -U</code> 로 업데이트하면 대부분 해결됩니다. 업데이트가 없으면 며칠 뒤 다시 시도하세요.</p>' +
+    '<b>Windows 에서 파일명이 이상하거나 저장이 안 됨</b><p>Windows 에서 쓸 수 없는 문자를 자동으로 바꾸도록 <code>--windows-filenames</code> 가 들어가 있습니다. 경로가 너무 길면 저장 폴더를 짧은 경로(예: C:\\clips)로 바꾸세요.</p>' +
+    '<b>틱톡 영상에 워터마크가 있어요</b><p>yt-dlp 는 기본적으로 워터마크 없는 원본을 고릅니다. 있다면 <code>yt-dlp -U</code> 후 다시 받아보세요.</p>' +
+    '<b>재생목록 전체를 받고 싶어요</b><p>이 도구는 실수로 수백 개를 받는 걸 막기 위해 <code>--no-playlist</code> 를 넣습니다. 재생목록은 터미널에서 직접 <code>yt-dlp "재생목록URL"</code> 로 받으세요.</p>' +
+  '</div>';
+
+  bindAll(v);
+}
+function highlight(cmd) {
+  return esc(cmd).replace(/(^yt-dlp)/, '<span class="k">$1</span>').replace(/(&quot;https?:[^&]*&quot;|https?:\/\/\S+)/g, '<span class="u">$1</span>');
+}
+function bindAll(v) {
+  var ta = $('#links', v);
+  ta.addEventListener('input', function () {
+    state.text = ta.value; save();
+    clearTimeout(bindAll._t); bindAll._t = setTimeout(function () { var pos = ta.selectionStart; render(); var t2 = $('#links'); if (t2) { t2.focus(); t2.setSelectionRange(pos, pos); } }, 250);
+  });
+  on('#clearLinks', 'click', function () { state.text = ''; save(); render(); }, v);
+  on('#installed', 'change', function (e) { state.installed = e.target.checked; save(); render(); }, v);
+  on('#quality', 'change', function (e) { state.quality = e.target.value; save(); render(); }, v);
+  on('#cookies', 'change', function (e) { state.cookies = e.target.value; save(); render(); }, v);
+  on('#folder', 'change', function (e) { state.folder = e.target.value; save(); render(); }, v);
+  on('#template', 'change', function (e) { state.template = e.target.value.trim() || DEFAULT_TEMPLATE; save(); render(); }, v);
+  on('#tplReset', 'click', function () { state.template = DEFAULT_TEMPLATE; save(); render(); }, v);
+  ['meta', 'thumb', 'subs', 'update'].forEach(function (k) { on('#' + k, 'change', function (e) { state[k] = e.target.checked; save(); render(); }, v); });
+  on('[data-copy]', 'click', function (e) { copyText(e.currentTarget.getAttribute('data-copy'), '명령을 복사했습니다 — 터미널에 붙여넣으세요'); }, v);
+  on('#copyCmd', 'click', function () {
+    var good = parseLinks(state.text).filter(function (l) { return l.ok; });
+    copyText(buildCommand(good, opts()), '명령을 복사했습니다 — 터미널에 붙여넣고 Enter'); pushHistory(good, 'copy'); render();
+  }, v);
+  on('#dlScript', 'click', function () {
+    var good = parseLinks(state.text).filter(function (l) { return l.ok; }), o = opts();
+    download(scriptName(o), buildScript(good, o), 'text/plain;charset=utf-8');
+    pushHistory(good, 'script'); render();
+    toast(good.length + '개 링크 스크립트를 내려받았습니다 — ' + (o.os === 'win' ? '더블클릭해서 실행' : '터미널에서 sh 로 실행'), 'ok');
+  }, v);
+  on('#histCsv', 'click', function () {
+    var q = function (s) { return '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"'; };
+    var lines = [['시각', '플랫폼', '링크', '영상ID', '화질'].map(q).join(',')];
+    state.history.forEach(function (h) { lines.push([fmtTime(h.t), (PLAT[h.platform] || {}).name || h.platform, h.url, h.id, (QUALITY[h.quality] || {}).name || h.quality].map(q).join(',')); });
+    download('download-history-' + stamp() + '.csv', String.fromCharCode(0xFEFF) + lines.join('\r\n'), 'text/csv;charset=utf-8');
+  }, v);
+  on('#histReuse', 'click', function () { state.text = state.history.map(function (h) { return h.url; }).join('\n'); save(); render(); }, v);
+  on('#histClear', 'click', function () { if (confirm('최근 목록 ' + state.history.length + '개를 지울까요?')) { state.history = []; save(); render(); } }, v);
+  on('[data-hadd]', 'click', function (e) { var u = e.currentTarget.getAttribute('data-hadd'); if (state.text.indexOf(u) === -1) state.text = (state.text ? state.text + '\n' : '') + u; save(); render(); }, v);
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  state = load();
+  on('#osSel button', 'click', function (e) { state.os = e.currentTarget.getAttribute('data-os'); save(); render(); });
+  render();
+});
+window.__VDL__ = { get state() { return state; }, set state(s) { state = s; }, detect: detect, parseLinks: parseLinks, buildArgs: buildArgs,
+  buildCommand: buildCommand, buildScript: buildScript, shQuote: shQuote, render: render, QUALITY: QUALITY, DEFAULT_TEMPLATE: DEFAULT_TEMPLATE, LS_KEY: LS_KEY };
+</script>
+</body>
+</html>
